@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -209,7 +209,10 @@ function AddDriverDialog({ onAdded }) {
         <Button className="bg-primary hover:bg-[#4C1D95] gap-2" data-testid="add-driver-btn"><Plus className="h-4 w-4" /> Add driver</Button>
       </DialogTrigger>
       <DialogContent data-testid="add-driver-dialog">
-        <DialogHeader><DialogTitle>Add a driver</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add a driver</DialogTitle>
+          <DialogDescription>Add a driver so they can be assigned to bookings.</DialogDescription>
+        </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={set("name")} placeholder="Dave Wilson" data-testid="driver-name" /></div>
           <div className="space-y-2"><Label>Phone</Label><Input value={form.phone} onChange={set("phone")} placeholder="07123 456789" data-testid="driver-phone" /></div>
