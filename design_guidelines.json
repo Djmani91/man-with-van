@@ -1,0 +1,107 @@
+{
+  "theme": "light",
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "weights": ["600", "700", "800"],
+      "letter_spacing": "tracking-tight",
+      "usage": "Authoritative, modern, tech-forward logistics."
+    },
+    "body": {
+      "family": "DM Sans, sans-serif",
+      "weights": ["400", "500"],
+      "letter_spacing": "tracking-normal",
+      "usage": "Clean, highly readable text for booking forms and tracking dashboards."
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tighter leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body": "text-base text-slate-600",
+      "small": "text-sm text-slate-500 uppercase tracking-widest"
+    }
+  },
+  "colors": {
+    "brand_primary": "#5B21B6",
+    "brand_primary_hover": "#4C1D95",
+    "brand_accent": "#8B5CF6",
+    "background_app": "#F8FAFC",
+    "card_background": "#FFFFFF",
+    "text_primary": "#0F172A",
+    "text_secondary": "#475569",
+    "status_live": "#10B981",
+    "border_subtle": "#E2E8F0",
+    "rules": [
+      "Use #5B21B6 (Deep Violet) for primary CTAs, active stepper states, and driver map pins.",
+      "The app background must be Slate-50 (#F8FAFC) to allow stark white (#FFFFFF) cards to pop.",
+      "Never use pure black text. Use Slate-900 (#0F172A) for max contrast without harshness.",
+      "Status elements (Live tracking, Driver Assigned) must use vibrant Emerald (#10B981)."
+    ]
+  },
+  "visual_enhancers": {
+    "cards": "Neumorphic Tactile: White cards (bg-white) with a crisp 1px border (border-slate-200) and soft ambient shadow (shadow-sm). Interactive cards (van size selection) must lift on hover (-translate-y-1) and gain shadow-md.",
+    "glassmorphism": "For the mobile sticky-bottom price summary or sticky header nav: bg-white/80 backdrop-blur-xl border-t/border-b border-slate-200.",
+    "buttons": "Rounded (rounded-lg). Primary buttons must use the brand violet. Add a subtle transition-all duration-200. No pill shapes; keep it slightly structured to match the van/logistics theme."
+  },
+  "components": {
+    "required_shadcn": [
+      "Button", "Card", "Input", "Label", "Select", "Table", "Tabs", "Dialog", "Badge", "Separator"
+    ],
+    "custom_booking_stepper": "Implement a horizontal progress tracker at the top of the booking flow. Show completed steps, current step, and upcoming. Use the brand primary color for completed/active.",
+    "persistent_summary": "A sticky summary panel on desktop (right side) or sticky bottom bar on mobile showing 'Total Quote: £X' that updates dynamically.",
+    "map_tracking": "A large, immersive map container (rounded-xl overflow-hidden shadow-inner) showing a custom pin for the driver's live location."
+  },
+  "grids_and_layouts": {
+    "marketing_home": "Asymmetrical Bento grid for features. Avoid the 'center-everything' disease. Hero section: 12-column grid, content spanning 7 columns left, overlapping image grid on the right.",
+    "booking_flow": "Single-column layout (max-w-2xl mx-auto). Follow Progressive Disclosure—only show the inputs required for the current step.",
+    "admin_dashboard": "High-density grid (gap-4). Admin tables should stretch to fill containers. Strip away unnecessary card borders in the table to maximize data visibility.",
+    "spacing": "Generous Spacing Philosophy for marketing (p-12, p-16, gap-12). Dense Spacing for Admin/Dispatch (p-4, p-6, gap-4)."
+  },
+  "motion": {
+    "booking_transitions": "Use framer-motion for step transitions. Slide left-to-right (x: 20 -> 0, opacity 0 -> 1) for a frictionless feel.",
+    "live_tracking_pulse": "The driver's location pin on the map must have an outer ring with an infinite scale and fade animation (animate-ping) to indicate live status.",
+    "hover_states": "All cards and buttons require micro-animations (e.g., hover:border-violet-300 transition-colors)."
+  },
+  "accessibility": {
+    "contrast": "Strict APCA/WCAG AA compliance. Ensure white text on brand violet has maximum readability.",
+    "focus": "All form inputs (postcode search, dates) must use focus:ring-2 focus:ring-violet-500 focus:border-transparent.",
+    "testing": "All interactive elements, specifically the multi-step form inputs and 'Next/Confirm' buttons, MUST include `data-testid` attributes."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1665521032636-e8d2f6927053?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwzfHx3aGl0ZSUyMGNvbW1lcmNpYWwlMjB2YW58ZW58MHx8fHwxNzkwNzIzMDMzfDA&ixlib=rb-4.1.0&q=85",
+        "description": "White commercial van driving. Use for Hero Section background or tracking visualization.",
+        "category": "Hero / Branding"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1758523671087-b256bbbca475?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwzfHxkZWxpdmVyeSUyMGRyaXZlciUyMHNtaWxpbmclMjBob2xkaW5nJTIwYm94fGVufDB8fHx8MTc5MDcyMzAyMHww&ixlib=rb-4.1.0&q=85",
+        "description": "Happy couple moving boxes. Perfect for the 'Why Choose Us' or trust-building section.",
+        "category": "Marketing Content"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1649083048269-8bfb755e7b87?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwzfHxtb3ZpbmclMjBib3hlcyUyMGluJTIwbW9kZXJuJTIwaG9tZXxlbnwwfHx8fDE3OTA3MjMwMjB8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Clean modern living room with boxes. Use for 'Residential Moves' service card.",
+        "category": "Services Grid"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "DO NOT use generic center-aligned layouts. Left-align typography to preserve reading flow, especially in the multi-step booking form.",
+    "Do not add .App { text-align: center; } in the CSS file.",
+    "Ensure the Quote Engine immediately calculates price based on selected van size and fake distance before user proceeds to booking details.",
+    "The Multi-step booking flow MUST use a structured wizard (e.g., 1. Route -> 2. Van Size & Date -> 3. Details -> 4. Review & Book).",
+    "Never use completely transparent backgrounds over imagery or maps (e.g., the tracking screen overlay). Always use backdrop-blur or solid fill.",
+    "Admin/Dispatch dashboard should feel like a 'Command Center'. High density, data-first. Remove heavy card styles for data tables.",
+    "Use lucide-react for all iconography. Avoid emojis.",
+    "Use sonner for toast notifications (e.g., 'Booking Confirmed', 'Driver Assigned')."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use 2-3x more spacing than feels comfortable on marketing pages. Cramped designs look cheap.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "You MUST NOT apply universal transition (transition: all without duration/property) that breaks transforms. Use specific utilities like transition-colors or transition-transform.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "All interactive and key informational elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}
