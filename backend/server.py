@@ -7,6 +7,7 @@ load_dotenv(ROOT_DIR / '.env')
 import os
 import re
 import uuid
+import html
 import secrets
 import hashlib
 import asyncio
@@ -670,6 +671,36 @@ async def resolve_coords(address: str):
     return (await geocode(address)) or pseudo_coords(address)
 
 
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+
+async def send_telegram_job_alert(booking: dict):
+    """Send a send-only Telegram alert for a new job. No-op until token + chat id are set."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    def esc(v):
+        return html.escape(str(v if v is not None else "—"))
+
+    cc = "\n⚠️ <b>Central London congestion charge zone</b>" if booking.get("congestion_charge") else ""
+    text = (
+        f"🚚 <b>New job: {esc(booking.get('booking_id'))}</b>\n"
+        f"📍 <b>From:</b> {esc(booking.get('pickup'))}\n"
+        f"🏁 <b>To:</b> {esc(booking.get('dropoff'))}\n"
+        f"📅 {esc(booking.get('date'))} at {esc(booking.get('time'))}\n"
+        f"🚐 {esc(booking.get('van_name'))}\n"
+        f"👤 {esc(booking.get('customer_name'))} · {esc(booking.get('customer_phone'))}"
+        f"{cc}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                              json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"})
+    except Exception as e:
+        logger.warning(f"Telegram alert failed: {e}")
+
+
 def _mock_suggest(q: str) -> list:
     seed = q.upper().replace(" ", "")
     out = []
@@ -801,6 +832,7 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "timeline": [], "created_at": now,
     }
     await db.bookings.insert_one(booking)
+    await send_telegram_job_alert(booking)
     return strip_booking(booking)
 
 

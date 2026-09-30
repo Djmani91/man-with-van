@@ -56,3 +56,11 @@
   yellow warning on the job card. (Flag/warning only — not added to price.)
 - Verified: iteration_13 (100% backend+frontend) for admin manage/logout/labels/flat-field;
   curl-verified congestion detection + admin driver update.
+
+## 2026-06 — Telegram new-job alerts
+- send_telegram_job_alert(booking) added; fires on every new booking in create_booking.
+  Uses Telegram sendMessage (HTML), send-only, no webhook. No-op unless TELEGRAM_BOT_TOKEN
+  and TELEGRAM_CHAT_ID are set; failures are caught and never break booking creation.
+- Configured in preview .env: bot @Manwithvan2bot, personal chat (Rizwan, id 5811928111).
+- Verified: direct sendMessage ok + booking-triggered alert delivered.
+- ACTION: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to production (carried on next deploy).
