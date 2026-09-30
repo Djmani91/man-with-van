@@ -393,7 +393,7 @@ const AccessPicker = ({ label, access, floor, onAccess, onFloor, testid }) => (
       ))}
     </div>
     {access === "stairs" && (
-      <Select value={floor >= 1 ? String(floor) : undefined} onValueChange={(v) => onFloor(Number(v))}>
+      <Select value={floor >= 1 ? String(floor) : ""} onValueChange={(v) => onFloor(Number(v))}>
         <SelectTrigger className="bg-white mt-3" data-testid={`floor-${testid}`}><SelectValue placeholder="Which floor?" /></SelectTrigger>
         <SelectContent>
           {STAIR_FLOORS.map((f) => <SelectItem key={f.v} value={String(f.v)}>{f.l}</SelectItem>)}

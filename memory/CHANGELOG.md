@@ -109,3 +109,9 @@
 - Floors & access step now requires ACTIVE selection: floor defaults changed to blank/null; FloorPicker shows "Select floor" placeholder + "Lift available"/"Stairs only" buttons (no default). Continue stays disabled until pickup floor + pickup access + dropoff floor + dropoff access are all chosen.
 - Verified iteration_16.json (frontend 100%): no wizard-price/wizard-total at any step; floor gating enforced (disabled until all 4 chosen); booking creates and persists pickup_floor/dropoff_floor/pickup_lift/dropoff_lift correctly.
 - Note (out of scope): testing agent observed GET /api/bookings may return id=null for latest booking; downstream uses booking_id so not blocking.
+
+## 2026-06 — Ground/Stairs/Lift access selector (mobile-reference match)
+- BookingWizard Floors step redesigned to match user's mobile screenshot: 3-button access selector per address (Ground | Stairs | Lift), solid purple when selected. Floor dropdown ("Which floor?" 1st/2nd/3rd+) appears ONLY when Stairs is chosen.
+- Added pickup_access/dropoff_access form state; setAccess() maps: ground->floor0/lift false, lift->floor0/lift true, stairs->lift false + chosen floor. Backend ignores the extra access fields and persists floor/lift.
+- Gating: Continue disabled until both addresses have access chosen (+ a floor if Stairs).
+- Verified iteration_17.json (frontend 100%): selectors, conditional floor, gating combos, and persistence (Lift->floor0/lift true, Stairs 3rd+->floor3/lift false) all correct.

@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only test of the redesigned Floors & Access step (step 2) of the BookingWizard. Verified 3-button Ground/Stairs/Lift access selectors for both pickup and dropoff, purple-selected styling, conditional floor dropdown when Stairs is chosen, gating logic on the Continue button, and end-to-end booking submission with correct persistence.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "Access selector: all 6 testids (access-{ground,stairs,lift}-{pickup,dropoff}) visible and clickable on step 2. Selected button shows bg-primary (purple).",
+    "Floor conditional: floor-pickup / floor-dropoff hidden initially; appear only when access==='stairs'; hidden again when switched to Ground/Lift.",
+    "Gating: Continue disabled with nothing selected; disabled with only pickup=Ground; disabled with pickup=Ground + dropoff=Stairs (no floor); enabled with pickup=Ground + dropoff=Ground; enabled with pickup=Lift + dropoff=Stairs+3rd+.",
+    "End-to-end booking as customer@example.com / Customer#2026: addresses SW1A -> E16 2FR via option-0, pickup=Lift, dropoff=Stairs + 3rd+ floor, date+time, small van, items text + 1 photo, name/phone/notes, Confirm. Toast 'Booking created' shown, navigated to /jobs.",
+    "Persistence via GET /api/bookings: latest booking has pickup_lift=true, pickup_floor=0, dropoff_lift=false, dropoff_floor=3 (matches expectations)."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: React warning 'Select is changing from uncontrolled to controlled' when Stairs is picked and floor is still 0. In AccessPicker the Select uses value={floor >= 1 ? String(floor) : undefined}; consider passing an empty string or defaultValue consistently to avoid the warning."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "customer@example.com / Customer#2026 (worked)",
+  "seed_data_creation": "One booking MWV3BF4AD59 created for customer@example.com (London SW1A 1AA -> London E16 2FR).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Floors & access step 2 in /app/frontend/src/components/BookingWizard.jsx uses AccessPicker with testids access-{ground|stairs|lift}-{pickup|dropoff} and floor-{pickup|dropoff}. Backend BookingInput persists pickup_floor/dropoff_floor/pickup_lift/dropoff_lift correctly. Auth modal defaults to Register — testing existing users requires clicking data-testid=auth-toggle first."
+}
