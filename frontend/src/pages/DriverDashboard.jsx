@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Package, Clock,
+  Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Clock,
   ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2, AlertTriangle,
 } from "lucide-react";
-import { api, formatApiError, API } from "@/lib/api";
+import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
 import { ChatModal } from "@/components/ChatModal";
+import { DriverJobDetail } from "@/components/DriverJobDetail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ export default function DriverDashboard() {
   const [waiting, setWaiting] = useState([]);
   const [accepted, setAccepted] = useState([]);
   const [chat, setChat] = useState(null);
+  const [detail, setDetail] = useState(null);
 
   const approved = profile?.status === "approved";
 
@@ -101,7 +103,7 @@ export default function DriverDashboard() {
             {!approved ? <Empty icon={ShieldAlert} text="Available jobs unlock after approval." />
               : available.length === 0 ? <Empty icon={Route} text="No open jobs right now. Check back soon." />
               : available.map((j) => (
-                <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`}>
+                <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })}>
                   <BidRow job={j} onBid={sendQuote} />
                 </JobCard>
               ))}
@@ -111,7 +113,7 @@ export default function DriverDashboard() {
           <TabsContent value="waiting" className="mt-4 space-y-3" data-testid="driver-waiting-list">
             {waiting.length === 0 ? <Empty icon={Hourglass} text="No quotations awaiting a decision." />
               : waiting.map((j) => (
-                <JobCard key={j.booking_id} job={j} testid={`waiting-${j.booking_id}`}>
+                <JobCard key={j.booking_id} job={j} testid={`waiting-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "waiting" })}>
                   <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 font-medium"><Hourglass className="h-4 w-4" /> Waiting for confirmation</div>
                 </JobCard>
               ))}
@@ -121,7 +123,7 @@ export default function DriverDashboard() {
           <TabsContent value="accepted" className="mt-4 space-y-3" data-testid="driver-accepted-list">
             {activeAccepted.length === 0 ? <Empty icon={CheckCircle2} text="No accepted jobs yet." />
               : activeAccepted.map((j) => (
-                <JobCard key={j.booking_id} job={j} showContact testid={`accepted-${j.booking_id}`}>
+                <JobCard key={j.booking_id} job={j} showContact testid={`accepted-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "accepted" })}>
                   <div className="mt-3 flex items-center gap-2">
                     <Badge className="bg-blue-100 text-blue-700 border-0">{LABEL[j.status] || j.status}</Badge>
                     <Select value={DRIVER_STEPS.find((s) => s.v === j.status)?.v || ""} onValueChange={(v) => setStatus(j.booking_id, v)}>
@@ -156,11 +158,19 @@ export default function DriverDashboard() {
         </Tabs>
       </div>
       {chat && <ChatModal bookingId={chat} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="driver" />}
+      {detail && (
+        <DriverJobDetail
+          job={detail.job} mode={detail.mode}
+          onClose={() => setDetail(null)}
+          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }}
+          DRIVER_STEPS={DRIVER_STEPS} LABEL={LABEL}
+        />
+      )}
     </div>
   );
 }
 
-const JobCard = ({ job, children, showContact }) => (
+const JobCard = ({ job, children, showContact, onOpen }) => (
   <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>
     {job.congestion_charge && (
       <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-100 border border-amber-300 px-3 py-2" data-testid={`congestion-warning-${job.booking_id}`}>
@@ -168,30 +178,20 @@ const JobCard = ({ job, children, showContact }) => (
         <p className="text-xs font-semibold text-amber-800">Congestion charge zone — Central London. Factor in the daily charge.</p>
       </div>
     )}
-    <div className="flex items-center justify-between">
-      <span className="font-heading font-semibold text-slate-900 text-sm">{job.booking_id}</span>
-      <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{(job.my_bid ?? job.suggested_price ?? job.price ?? 0).toFixed(0)}</span>
-    </div>
-    <div className="mt-2 space-y-1.5 text-sm text-slate-600">
-      <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {job.pickup}</p>
-      <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /> {job.dropoff}</p>
-      <p className="flex items-center gap-2 text-slate-500"><Calendar className="h-3.5 w-3.5 shrink-0" /> {job.date} at {job.time} · {job.distance_miles} mi</p>
-      <p className="flex items-center gap-2 text-slate-500"><Truck className="h-3.5 w-3.5 shrink-0" /> {job.van_name}</p>
-      {job.items && <p className="flex items-start gap-2 text-slate-500"><Package className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {job.items}</p>}
-      {showContact && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
-    </div>
-    {job.photos?.length > 0 && (
-      <div className="mt-3" data-testid={`job-photos-${job.booking_id}`}>
-        <p className="text-xs text-slate-400 mb-1.5">Customer's photos</p>
-        <div className="flex gap-2 flex-wrap">
-          {job.photos.map((p, i) => (
-            <a key={i} href={`${API}/files/${p}`} target="_blank" rel="noreferrer" data-testid={`job-photo-${job.booking_id}-${i}`}>
-              <img src={`${API}/files/${p}`} alt={`Item ${i + 1}`} className="h-16 w-16 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
-            </a>
-          ))}
-        </div>
+    <div onClick={onOpen} className={onOpen ? "cursor-pointer" : ""} data-testid={`open-${job.booking_id}`}>
+      <div className="flex items-center justify-between">
+        <span className="font-heading font-semibold text-slate-900 text-sm">{job.booking_id}</span>
+        <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{(job.my_bid ?? job.suggested_price ?? job.customer_pays ?? job.price ?? 0).toFixed(0)}</span>
       </div>
-    )}
+      <div className="mt-2 space-y-1.5 text-sm text-slate-600">
+        <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {job.pickup || job.pickup_postcode}</p>
+        <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /> {job.dropoff || job.dropoff_postcode}</p>
+        <p className="flex items-center gap-2 text-slate-500"><Calendar className="h-3.5 w-3.5 shrink-0" /> {job.date} at {job.time} · {job.distance_mi ?? job.distance_miles} mi</p>
+        <p className="flex items-center gap-2 text-slate-500"><Truck className="h-3.5 w-3.5 shrink-0" /> {job.van_name}</p>
+        {showContact && job.customer_phone && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
+      </div>
+      {onOpen && <p className="text-xs text-primary font-medium mt-2">Tap for full details →</p>}
+    </div>
     {children}
   </div>
 );

@@ -158,6 +158,35 @@ def driver_dist(profile: dict, booking: dict) -> float:
 
 # Approximate London Congestion Charge Zone bounding box.
 CONGESTION_ZONE = {"lat_min": 51.4900, "lat_max": 51.5320, "lng_min": -0.1490, "lng_max": -0.0750}
+CONGESTION_FEE = 15.0
+COMMISSION_RATE = 0.15
+_POSTCODE_RE = re.compile(r'([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})', re.I)
+
+
+def extract_postcode(addr: str) -> str:
+    if not addr:
+        return ""
+    m = _POSTCODE_RE.search(addr)
+    return re.sub(r'\s+', ' ', m.group(1)).upper() if m else ""
+
+
+def driver_job_view(j: dict, reveal: bool) -> dict:
+    """Driver-facing job: postcode only until deposit paid, plus earnings (85%)."""
+    v = dict(j)
+    v["pickup_postcode"] = extract_postcode(j.get("pickup", ""))
+    v["dropoff_postcode"] = extract_postcode(j.get("dropoff", ""))
+    v["deposit_paid"] = reveal
+    if not reveal:
+        v["pickup"] = None
+        v["dropoff"] = None
+        v.pop("pickup_coords", None)
+        v.pop("dropoff_coords", None)
+        v.pop("customer_phone", None)
+    cp = j.get("my_bid") or j.get("price") or 0
+    v["commission_rate"] = COMMISSION_RATE
+    v["customer_pays"] = round(cp, 2)
+    v["your_earnings"] = round(cp * (1 - COMMISSION_RATE), 2)
+    return v
 
 
 def in_congestion_zone(coords: dict) -> bool:
@@ -185,21 +214,23 @@ def estimated_hours(distance, van_size, pf, df, needs_helper=False, heavy_items=
 
 def compute_quote(pickup, dropoff, van_size, date, time,
                   pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True, heavy_items=False,
-                  distance_override=None):
+                  distance_override=None, congestion=False):
     van = VAN_BY_ID.get(van_size)
     if not van:
         raise HTTPException(status_code=400, detail="Invalid van size")
     distance = distance_override if (distance_override is not None and distance_override > 0) else pseudo_distance(pickup, dropoff)
     hours = estimated_hours(distance, van_size, pickup_floor, dropoff_floor, heavy_items=heavy_items)
     est = round(van["rate_min"] * hours, 2)
+    congestion_fee = CONGESTION_FEE if congestion else 0.0
+    total = round(est + congestion_fee, 2)
     return {
         "van_size": van_size, "van_name": van["name"], "distance_miles": distance,
         "estimated_hours": hours, "rate_from": van["rate_min"],
-        "estimate_from": est, "total": est, "currency": "GBP",
+        "estimate_from": est, "congestion_fee": congestion_fee, "total": total, "currency": "GBP",
     }
 
 
-def driver_job_price(profile: dict, booking: dict, van_override: str = None):
+def driver_job_price(profile: dict, booking: dict, van_override: str = None, apply_congestion: bool = True):
     van = van_override or booking["van_size"]
     pricing = profile.get("pricing") or default_pricing()
     rate = pricing["rates"].get(van, VAN_BY_ID[van]["rate_min"])
@@ -214,6 +245,8 @@ def driver_job_price(profile: dict, booking: dict, van_override: str = None):
     price += pricing["stairs_fee"] * floors
     if booking.get("needs_helper"):
         price += pricing["helper_rate"] * hours
+    if booking.get("congestion_charge") and apply_congestion:
+        price += CONGESTION_FEE
     return round(price, 2), hours
 
 
@@ -619,10 +652,11 @@ async def quote(data: QuoteInput):
     pcoords = await resolve_coords(data.pickup)
     dcoords = await resolve_coords(data.dropoff)
     dist = haversine_mi(pcoords, dcoords)
+    congestion = in_congestion_zone(pcoords) or in_congestion_zone(dcoords)
     result = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
                            data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
-                           distance_override=dist)
-    result["congestion_charge"] = in_congestion_zone(pcoords) or in_congestion_zone(dcoords)
+                           distance_override=dist, congestion=congestion)
+    result["congestion_charge"] = congestion
     return result
 
 
@@ -830,9 +864,10 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
     pcoords = await resolve_coords(data.pickup)
     dcoords = await resolve_coords(data.dropoff)
     journey_mi = haversine_mi(pcoords, dcoords)
+    congestion = in_congestion_zone(pcoords) or in_congestion_zone(dcoords)
     q = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
                       data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
-                      distance_override=journey_mi)
+                      distance_override=journey_mi, congestion=congestion)
     now = datetime.now(timezone.utc).isoformat()
     promo_code = (data.promo_code or "").strip().upper()
     promo = PROMO_CODES.get(promo_code)
@@ -1449,7 +1484,8 @@ async def driver_set_documents(data: DocumentsInput, user: dict = Depends(requir
 
 @api_router.get("/driver/jobs")
 async def driver_jobs(user: dict = Depends(require_driver)):
-    return await db.bookings.find({"driver_id": user["user_id"]}, {"_id": 0}).sort("date", 1).to_list(200)
+    jobs = await db.bookings.find({"driver_id": user["user_id"]}, {"_id": 0}).sort("date", 1).to_list(200)
+    return [driver_job_view(j, reveal=paid(j)) for j in jobs]
 
 
 @api_router.post("/driver/jobs/{booking_id}/status")
@@ -1479,8 +1515,8 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     for j in open_jobs:
         dist = driver_dist(prof, j)
         if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
-            suggested, hours = driver_job_price(prof, j)
-            out.append({**j, "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
+            suggested, hours = driver_job_price(prof, j, apply_congestion=False)
+            out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
     return out
 
 
@@ -1505,7 +1541,7 @@ async def driver_requests(user: dict = Depends(require_driver)):
     for r in bids:
         b = await db.bookings.find_one({"booking_id": r["booking_id"]}, {"_id": 0})
         if b and not b.get("driver_id"):
-            out.append({**b, "my_bid": r["price"]})
+            out.append(driver_job_view({**b, "my_bid": r["price"]}, reveal=False))
     return out
 
 

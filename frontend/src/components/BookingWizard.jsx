@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2, Loader2,
+  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2, Loader2, AlertTriangle,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -307,6 +307,11 @@ export const BookingWizard = ({ compact = true }) => {
               <span className="text-sm text-slate-600">Estimated fixed price · {quote.distance_miles} mi</span>
               <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{quote.total.toFixed(2)}</span>
             </div>
+          )}
+          {quote.congestion_fee > 0 && (
+            <p className="text-xs text-amber-700 mt-2 flex items-center gap-1.5" data-testid="wizard-congestion-fee">
+              <AlertTriangle className="h-3.5 w-3.5" /> Includes £{quote.congestion_fee.toFixed(2)} Central London congestion charge
+            </p>
           )}
         </div>
       )}
