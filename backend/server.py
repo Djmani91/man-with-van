@@ -841,8 +841,14 @@ async def upload(file: UploadFile = File(...), user: dict = Depends(get_current_
 
 
 @api_router.get("/files/{path:path}")
-async def download(path: str, authorization: str = Header(None), auth: str = Query(None)):
-    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else auth
+async def download(path: str, request: Request, auth: str = Query(None)):
+    token = request.cookies.get("session_token")
+    if not token:
+        authz = request.headers.get("Authorization", "")
+        if authz.startswith("Bearer "):
+            token = authz[7:]
+    if not token:
+        token = auth
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     if not await db.sessions.find_one({"session_token": token}):

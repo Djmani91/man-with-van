@@ -138,3 +138,8 @@
 - Removed the "from £X/hr" price line from van cards.
 - Section titles: "When do you need the van?" and "Which van do you need?"; added coverage note under addresses ("within 20 miles of London, Oxford, Birmingham, Manchester, Liverpool, or Blackpool…").
 - Verified iteration_21.json (frontend 100%): mobile single-page + desktop wizard both correct; end-to-end mobile booking created.
+
+## 2026-06 — Fix: customer photos not showing on driver side
+- Root cause: GET /api/files/{path} only authenticated via Authorization: Bearer header or ?auth= query param. An <img src> tag can send neither, so driver-side photo requests returned 401 and images never rendered.
+- Fix: /files now also reads the session_token cookie (falls back to Bearer header, then ?auth=). Web <img> requests now load (cookie sent automatically); still 401 without any auth.
+- Verified via curl: with cookie -> HTTP 200 image/png; no auth -> 401. driver_job_view already includes `photos` for assigned + available/instant jobs.
