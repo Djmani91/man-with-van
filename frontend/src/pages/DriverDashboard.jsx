@@ -312,6 +312,12 @@ const JobCard = ({ job, children, showContact, onOpen }) => {
         </div>
       )}
       <div onClick={onOpen} className={onOpen ? "cursor-pointer" : ""} data-testid={`open-${job.booking_id}`}>
+        {job.fixed_price && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 w-fit" data-testid={`urgent-tag-${job.booking_id}`}>
+            <AlertTriangle className="h-3.5 w-3.5 text-white" />
+            <span className="text-xs font-bold text-white uppercase tracking-wide">Urgent · Fixed price</span>
+          </div>
+        )}
         <div className="flex items-start gap-3">
           <div className="shrink-0 w-14 rounded-xl bg-violet-50 border border-violet-100 text-center py-1.5" data-testid={`job-date-${job.booking_id}`}>
             <p className="text-[10px] font-bold uppercase tracking-wide text-primary leading-none">{bd.wd}</p>
@@ -327,6 +333,8 @@ const JobCard = ({ job, children, showContact, onOpen }) => {
               <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /> {job.dropoff || job.dropoff_postcode}</p>
               <p className="flex items-center gap-2 text-slate-500"><Calendar className="h-3.5 w-3.5 shrink-0" /> {job.time} · {job.distance_mi ?? job.distance_miles} mi</p>
               <p className="flex items-center gap-2 text-slate-500"><Truck className="h-3.5 w-3.5 shrink-0" /> {job.van_name}</p>
+              {job.payment_type === "deposit" && <p className="flex items-center gap-2 text-amber-700 font-medium" data-testid={`collect-note-${job.booking_id}`}><PoundSterling className="h-3.5 w-3.5 shrink-0" /> Collect £{(job.balance_due || 0).toFixed(2)} on the day (cash/bank)</p>}
+              {job.payment_type === "full" && <p className="flex items-center gap-2 text-emerald-700 font-medium" data-testid={`paid-note-${job.booking_id}`}><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Paid in full — company pays you after the job</p>}
               {showContact && job.customer_phone && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
             </div>
           </div>

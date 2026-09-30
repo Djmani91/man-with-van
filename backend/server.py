@@ -26,7 +26,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-from emails import send_booking_confirmation, send_status_update, send_driver_job_alert
+from emails import send_booking_confirmation, send_status_update, send_driver_job_alert, send_driver_fixed_alert, send_driver_assigned
 import storage
 from square import Square
 from square.environment import SquareEnvironment
@@ -187,6 +187,9 @@ def driver_job_view(j: dict, reveal: bool) -> dict:
     v["commission_rate"] = COMMISSION_RATE
     v["customer_pays"] = round(cp, 2)
     v["your_earnings"] = round(cp * (1 - COMMISSION_RATE), 2)
+    pay = j.get("payment") or {}
+    v["payment_type"] = pay.get("type")  # "deposit" | "full" | None
+    v["balance_due"] = round(pay.get("balance_due", 0) or 0, 2)
     return v
 
 
@@ -1173,6 +1176,12 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
             await send_booking_confirmation(updated)
     except Exception as e:
         logger.error(f"Confirmation email failed: {e}")
+    try:
+        du = await db.users.find_one({"user_id": prof["user_id"]}, {"_id": 0})
+        if du and du.get("email"):
+            await send_driver_assigned(du["email"], prof["name"], updated)
+    except Exception as e:
+        logger.error(f"Driver assigned email failed: {e}")
     return updated
 
 
@@ -1436,6 +1445,12 @@ async def admin_assign(booking_id: str, data: AssignInput, user: dict = Depends(
             await send_booking_confirmation(updated)
     except Exception as e:
         logger.error(f"Confirmation email failed: {e}")
+    try:
+        du = await db.users.find_one({"user_id": prof["user_id"]}, {"_id": 0})
+        if du and du.get("email"):
+            await send_driver_assigned(du["email"], prof["name"], updated)
+    except Exception as e:
+        logger.error(f"Driver assigned email failed: {e}")
     return updated
 
 
@@ -1530,7 +1545,40 @@ async def driver_cancel_job(booking_id: str, user: dict = Depends(require_driver
         "title": "Your driver cancelled", "body": "We're finding you another driver. Your payment is safe.",
         "read": False, "created_at": now,
     })
+    # Broadcast the urgent fixed-price re-offer to all approved drivers nearby (non-blocking).
+    asyncio.create_task(_broadcast_fixed_reoffer(booking_id, exclude_driver_id=user["user_id"]))
     return {"status": "cancelled", "penalised": penalised, "blocked_until": blocked_until, "message": message}
+
+
+async def _broadcast_fixed_reoffer(booking_id: str, exclude_driver_id: str = None):
+    try:
+        b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+        if not b or b.get("mode") != "fixed":
+            return
+        drivers = await db.driver_profiles.find({"status": "approved"}, {"_id": 0}).to_list(1000)
+        now = datetime.now(timezone.utc).isoformat()
+        for d in drivers:
+            if d["user_id"] == exclude_driver_id:
+                continue
+            try:
+                if driver_dist(d, b) > FIXED_RADIUS_MI:
+                    continue
+            except Exception:
+                continue
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()), "driver_id": d["user_id"], "booking_id": booking_id,
+                "type": "fixed_reoffer", "title": "🚨 Urgent fixed-price job",
+                "body": f"{b.get('van_name','')} · £{float(b.get('fixed_price') or b.get('price') or 0):.2f} · first to accept wins",
+                "read": False, "created_at": now,
+            })
+            u = await db.users.find_one({"user_id": d["user_id"]}, {"_id": 0})
+            if u and u.get("email"):
+                try:
+                    await send_driver_fixed_alert(u["email"], d.get("name", "Driver"), b)
+                except Exception as e:
+                    logger.error(f"Fixed re-offer email failed: {e}")
+    except Exception as e:
+        logger.error(f"Fixed re-offer broadcast failed: {e}")
 
 
 @api_router.get("/driver/profile")
@@ -1636,7 +1684,7 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
             dist = driver_dist(prof, j)
             if dist <= FIXED_RADIUS_MI:
                 hours = j.get("estimated_hours") or (j.get("quote") or {}).get("estimated_hours")
-                fixed_out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "est_hours": hours, "fixed_price": True})
+                fixed_out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "est_hours": hours, "fixed_price": True, "urgent": True})
         except Exception:
             continue
     # Fixed/priority jobs first, then bidding jobs.

@@ -184,6 +184,20 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
           </div>
         )}
 
+        {/* Payment settlement guidance (once the customer has paid) */}
+        {job.payment_type === "deposit" && (
+          <div className="mt-3 rounded-lg bg-amber-50 border border-amber-300 p-3" data-testid="settlement-deposit">
+            <p className="text-sm font-bold text-amber-800">Collect £{(job.balance_due || 0).toFixed(2)} from the customer</p>
+            <p className="text-xs text-amber-700 mt-0.5">The customer paid a deposit only. Collect the remaining balance in cash or bank transfer when you finish the job.</p>
+          </div>
+        )}
+        {job.payment_type === "full" && (
+          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-300 p-3" data-testid="settlement-full">
+            <p className="text-sm font-bold text-emerald-800">Customer paid in full by card</p>
+            <p className="text-xs text-emerald-700 mt-0.5">Nothing to collect on the day. Man With Van will pay your earnings (£{(job.your_earnings || 0).toFixed(2)}) after you complete the job.</p>
+          </div>
+        )}
+
         {/* Actions */}
         {mode === "quotation" && (
           job.fixed_price ? (

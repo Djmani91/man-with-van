@@ -163,3 +163,9 @@
 ## 2026-06 — "Choose payment first" scrolls to payment choice
 - MyJobs: the offer Accept button, when no payment type is selected, is now clickable and calls onNeedPayment() which smooth-scrolls up to the "How would you like to pay?" card and pulses/highlights it (ring) for ~2s. Once 15% deposit or Pay-in-full is chosen, the button becomes "Accept — £X" and charges. Payment card data-testid: payment-choice.
 - Frontend-only; compiles clean. Self-verified (deposit gating logic previously tested iter 18/23).
+
+## 2026-06 — Urgent fixed-price re-offer + payment settlement messaging
+- Urgent tag: when a driver cancels a paid job it re-offers as fixed price; /driver/available now returns urgent:true + fixed_price:true. DriverDashboard JobCard shows a red "Urgent · Fixed price" badge (urgent-tag-<id>). Verified via curl (fixed_price True, urgent True after cancel).
+- Email broadcast: on driver cancel, _broadcast_fixed_reoffer (background task) emails all approved drivers within 30mi (send_driver_fixed_alert) + inserts fixed_reoffer notifications. Excludes the cancelling driver.
+- Settlement messaging: driver_job_view now returns payment_type + balance_due. DriverJobDetail shows a settlement card — deposit: "Collect £X from the customer (cash/bank) when you finish"; full: "Paid in full; Man With Van pays your earnings after completion". Accepted job card shows a compact collect/paid line. Verified /driver/jobs returns payment_type=deposit, balance_due=68.
+- Emails: booking confirmation now includes a settlement block (deposit → pay remaining £X to driver cash/bank on the day; full → nothing more to pay). New send_driver_assigned email tells the driver to collect the balance (deposit) or that the company pays them after completion (full). Wired into _assign_and_pay and admin_assign.

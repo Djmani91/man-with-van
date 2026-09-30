@@ -130,6 +130,25 @@ def _row(label: str, value: str) -> str:
 
 async def send_booking_confirmation(booking: dict):
     q = booking["quote"]
+    pay = booking.get("payment") or {}
+    ptype = pay.get("type")
+    paid_amt = float(pay.get("amount", 0) or 0)
+    balance = float(pay.get("balance_due", 0) or 0)
+    if ptype == "deposit":
+        settle = (
+            f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;margin:16px 0">'
+            f'<p style="font-size:15px;color:#92400e;line-height:1.6;margin:0"><strong>You\'ve paid a £{paid_amt:.2f} deposit.</strong> '
+            f'The remaining <strong>£{balance:.2f}</strong> is due on moving day — please pay it directly to your driver by '
+            f'<strong>cash or bank transfer</strong> once the job is complete.</p></div>'
+        )
+    elif ptype == "full":
+        settle = (
+            f'<div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin:16px 0">'
+            f'<p style="font-size:15px;color:#15803d;line-height:1.6;margin:0"><strong>You\'ve paid in full (£{paid_amt:.2f}).</strong> '
+            f'There\'s nothing more to pay on the day. Extra charges may apply only for changes made on the day.</p></div>'
+        )
+    else:
+        settle = ""
     details = (
         '<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">'
         + _row("Booking ref", booking["booking_id"])
@@ -146,12 +165,44 @@ async def send_booking_confirmation(booking: dict):
         f'<p style="font-size:15px;color:#475569;line-height:1.6">Your move is booked and confirmed. '
         f'Here are your details:</p>'
         f'{details}'
-        f'<p style="font-size:15px;color:#475569;line-height:1.6">Our dispatch team will assign a '
-        f'driver shortly. Sign in to your account to track your move live on the day.</p>'
+        f'{settle}'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">Sign in to your account to track your move live on the day.</p>'
     )
     return await send_email(to=booking["customer_email"],
                             subject=f'Booking confirmed — {booking["booking_id"]}',
                             html=_shell(inner))
+
+
+async def send_driver_assigned(to_email: str, driver_name: str, booking: dict):
+    pay = booking.get("payment") or {}
+    ptype = pay.get("type")
+    balance = float(pay.get("balance_due", 0) or 0)
+    price = float(booking.get("price", 0) or 0)
+    earnings = round(price * 0.85, 2)
+    if ptype == "deposit":
+        settle = (
+            f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;margin:16px 0">'
+            f'<p style="font-size:15px;color:#92400e;line-height:1.6;margin:0">The customer paid a deposit only. '
+            f'<strong>Please collect the remaining £{balance:.2f} from the customer by cash or bank transfer</strong> '
+            f'when you complete the job.</p></div>'
+        )
+    else:
+        settle = (
+            f'<div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin:16px 0">'
+            f'<p style="font-size:15px;color:#15803d;line-height:1.6;margin:0">The customer has <strong>paid in full by card</strong> — '
+            f'nothing to collect from them. <strong>Man With Van will pay your earnings (£{earnings:.2f}) after you complete the job.</strong></p></div>'
+        )
+    inner = (
+        f'<p style="font-size:16px;color:#0f172a">Hi {escape(driver_name)},</p>'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">You\'ve been assigned a job:</p>'
+        '<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">'
+        + _row("Van", booking.get("van_name", ""))
+        + _row("Date & time", f'{booking.get("date","")} at {booking.get("time","")}')
+        + '</table>'
+        f'{settle}'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">Open your Driver Hub for full details.</p>'
+    )
+    return await send_email(to=to_email, subject="You've got a job — Man With Van", html=_shell(inner))
 
 
 async def send_status_update(booking: dict):
@@ -185,3 +236,19 @@ async def send_driver_job_alert(to_email: str, driver_name: str, booking: dict):
         f'before someone else does.</p>'
     )
     return await send_email(to=to_email, subject="New job in your area — Man With Van", html=_shell(inner))
+
+
+async def send_driver_fixed_alert(to_email: str, driver_name: str, booking: dict):
+    price = booking.get("fixed_price") or booking.get("price") or 0
+    inner = (
+        f'<p style="font-size:16px;color:#0f172a">Hi {escape(driver_name)},</p>'
+        f'<p style="font-size:15px;color:#b91c1c;line-height:1.6;font-weight:700">🚨 URGENT — a fixed-price job just became available near you.</p>'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">The previous driver cancelled, so this job is back on the market at a fixed price — <b>no bidding</b>. First driver to accept gets it.</p>'
+        '<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">'
+        + _row("Van", booking.get("van_name", ""))
+        + _row("Date & time", f'{booking.get("date","")} at {booking.get("time","")}')
+        + _row("Fixed price", f'£{float(price):.2f}')
+        + '</table>'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">Open your Driver Hub → Quotation and tap Accept before someone else does.</p>'
+    )
+    return await send_email(to=to_email, subject="🚨 Urgent fixed-price job near you — Man With Van", html=_shell(inner))
