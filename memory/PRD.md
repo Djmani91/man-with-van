@@ -52,3 +52,14 @@ Moving/removals booking platform. Customers get an instant quote, book a local v
 ## Next tasks
 - Confirm payments provider and wire checkout
 - Decide edge-case policies (cancellation window, no-driver-available handling)
+
+## Mobile app store identifiers (for future React Native build — NOT used by the web app)
+- iOS bundle ID (Apple / App Store Connect): com.base6a789f0035d4228147cfc5c9.app
+- Reuse the same identifier so the store listing, reviews and existing users carry over on update.
+- Action: apply this in the React Native iOS project (Xcode > Bundle Identifier) when the mobile app is built. No effect on the current web platform.
+
+## Marketplace layer status (iteration_3 — 100% backend 25/25 + frontend E2E passed)
+- Customer app shell: bottom tabs Book/My Jobs/Messages/Account.
+- Booking -> status 'quoting' -> choose Instant offers OR Bidding -> MOCK payment (15% deposit or full) -> assigned -> live track.
+- Driver: home-base postcode, per-van hourly rates within bands, in-app + email job alerts, place bids, chat.
+- Contact (phone/email) masked in chat and hidden until deposit paid. PAYMENTS ARE MOCKED (no real Stripe yet).
