@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { ChatModal } from "@/components/ChatModal";
+import { SquarePaymentModal } from "@/components/SquarePaymentModal";
 import { Seo } from "@/components/Seo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ export default function MyJobs() {
   const [profile, setProfile] = useState(null);
   const [accepting, setAccepting] = useState(null);
   const [broadcasting, setBroadcasting] = useState(false);
+  const [payFor, setPayFor] = useState(null); // { driverId, price }
 
   const load = useCallback(async () => {
     const { data } = await api.get("/bookings");
@@ -62,16 +64,28 @@ export default function MyJobs() {
     finally { setBroadcasting(false); }
   };
 
-  const accept = async (driverId, price) => {
-    setAccepting(driverId);
+  const accept = (driverId, price) => {
+    setPayFor({ driverId, price });
+  };
+
+  const payAmount = payFor ? (payType === "deposit" ? payFor.price * 0.15 : payFor.price) : 0;
+
+  const handleToken = async (sourceId) => {
+    if (!payFor || !active) return;
+    setAccepting(payFor.driverId);
     try {
-      await api.post(`/bookings/${active.booking_id}/select-driver`, { driver_id: driverId, payment_type: payType });
+      await api.post(`/bookings/${active.booking_id}/select-driver`, {
+        driver_id: payFor.driverId, payment_type: payType, source_id: sourceId,
+      });
       toast.success(payType === "deposit" ? "15% deposit paid — driver confirmed!" : "Paid in full — driver confirmed!");
+      setPayFor(null);
       const fresh = await load();
       const b = fresh.find((x) => x.booking_id === active.booking_id);
       if (b) navigate(`/track/${b.booking_id}`);
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-    finally { setAccepting(null); }
+    } catch (e) {
+      setAccepting(null);
+      throw new Error(formatApiError(e.response?.data?.detail));
+    }
   };
 
   const others = bookings?.filter((b) => b.status !== "quoting") || [];
@@ -179,6 +193,16 @@ export default function MyJobs() {
       </div>
 
       {chat && <ChatModal bookingId={chat} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="customer" />}
+      {payFor && (
+        <SquarePaymentModal
+          open={!!payFor}
+          onOpenChange={(o) => { if (!o) { setPayFor(null); setAccepting(null); } }}
+          amount={payAmount}
+          payType={payType}
+          driverName={(offers?.offers || bids)?.find((o) => o.driver_id === payFor.driverId)?.name}
+          onToken={handleToken}
+        />
+      )}
       <ProfileModal profile={profile} onClose={() => setProfile(null)} />
       <BottomNav />
     </div>

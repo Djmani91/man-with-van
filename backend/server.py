@@ -27,10 +27,19 @@ from pydantic import BaseModel, EmailStr, Field
 
 from emails import send_booking_confirmation, send_status_update, send_driver_job_alert
 import storage
+from square import Square
+from square.environment import SquareEnvironment
+from square.core.api_error import ApiError
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+square_client = Square(
+    token=os.environ["SQUARE_ACCESS_TOKEN"],
+    environment=SquareEnvironment.PRODUCTION if os.environ.get("SQUARE_ENV") == "production" else SquareEnvironment.SANDBOX,
+)
+SQUARE_LOCATION_ID = os.environ["SQUARE_LOCATION_ID"]
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -330,6 +339,7 @@ class AvailabilityInput(BaseModel):
 class SelectDriverInput(BaseModel):
     driver_id: str
     payment_type: str  # "deposit" | "full"
+    source_id: str  # single-use card token from Square Web Payments SDK
 
 
 class BidInput(BaseModel):
@@ -667,7 +677,39 @@ async def booking_bids(booking_id: str, user: dict = Depends(get_current_user)):
     return _tag_offers(sorted(out, key=lambda o: o["price"]))
 
 
-async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, customer_id: str):
+async def _charge_square(amount_gbp: float, booking_id: str, payment_type: str, source_id: str) -> str:
+    """Charge the card via Square. Returns the Square payment id or raises HTTPException."""
+    amount_pence = int(round(amount_gbp * 100))
+    if amount_pence <= 0:
+        raise HTTPException(status_code=400, detail="Nothing to pay")
+    try:
+        result = await asyncio.to_thread(
+            square_client.payments.create,
+            source_id=source_id,
+            idempotency_key=uuid.uuid4().hex,
+            amount_money={"amount": amount_pence, "currency": "GBP"},
+            autocomplete=True,
+            location_id=SQUARE_LOCATION_ID,
+            reference_id=booking_id[:40],
+            note=f"Man With Van {booking_id} ({payment_type})",
+        )
+    except ApiError as exc:
+        errs = getattr(exc, "errors", None) or []
+        msg = errs[0].detail if errs and getattr(errs[0], "detail", None) else "Card was declined. Please try another card."
+        logger.error(f"Square payment failed for {booking_id}: {errs}")
+        raise HTTPException(status_code=402, detail=msg)
+    except Exception as exc:
+        logger.error(f"Square payment error for {booking_id}: {exc}")
+        raise HTTPException(status_code=502, detail="Payment could not be processed. Please try again.")
+    payment = getattr(result, "payment", None)
+    if not payment or getattr(payment, "status", None) not in ("COMPLETED", "APPROVED"):
+        status = getattr(payment, "status", "unknown") if payment else "none"
+        logger.error(f"Square payment not completed for {booking_id}: {status}")
+        raise HTTPException(status_code=402, detail="Payment was not completed. Please try again.")
+    return payment.id
+
+
+async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, source_id: str, customer_id: str):
     b = await db.bookings.find_one({"booking_id": booking_id})
     if not b or b["user_id"] != customer_id:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -687,6 +729,7 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, cu
         raise HTTPException(status_code=400, detail="Invalid payment type")
     deposit = round(price * DEPOSIT_PCT, 2)
     amount = deposit if payment_type == "deposit" else price
+    square_payment_id = await _charge_square(amount, booking_id, payment_type, source_id)
     now = datetime.now(timezone.utc).isoformat()
     timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
                 {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
@@ -697,7 +740,7 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, cu
         "price": price, "status": "assigned",
         "payment": {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
                     "balance_due": round(price - amount, 2), "paid_at": now,
-                    "transaction_id": f"MOCK-{uuid.uuid4().hex[:10].upper()}"},
+                    "transaction_id": square_payment_id, "provider": "square"},
         "timeline": timeline, "mode": b.get("mode") or "instant",
     }})
     await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})
@@ -718,7 +761,7 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, cu
 
 @api_router.post("/bookings/{booking_id}/select-driver")
 async def select_driver(booking_id: str, data: SelectDriverInput, user: dict = Depends(get_current_user)):
-    return await _assign_and_pay(booking_id, data.driver_id, data.payment_type, user["user_id"])
+    return await _assign_and_pay(booking_id, data.driver_id, data.payment_type, data.source_id, user["user_id"])
 
 
 def driver_position(b: dict):
