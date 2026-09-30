@@ -1,0 +1,25 @@
+{
+  "summary": "Verified new Driver Job Detail overlay end-to-end. Backend: pytest 2/2 pass — /api/driver/available returns pickup_postcode/dropoff_postcode extracted correctly (SW1A 2DD, NW1 8NH), deposit_paid=false, pickup/dropoff hidden (null), commission_rate=0.15, your_earnings=round(customer_pays*0.85,2), plus date/time/van_name/needs_helper/floors/lifts/photos/items/distance_mi/est_hours all present; /api/driver/jobs on an admin-assigned (paid=office) booking flips deposit_paid=true and reveals full pickup/dropoff addresses with your_earnings intact. Frontend (mobile viewport 390x844, /driver): logged in seeded approved driver, Quotation tab shows open-<booking>; tapping opens data-testid driver-job-detail; verified job-pickup + job-dropoff chips render postcode + 'Full address revealed after deposit payment', google.com/maps/embed iframe (job-map), customer-budget, crew-required, pickup/dropoff floor lines, amber important-requirement box (stairs @ floors 2 & 3 no lift), and job-detail-quote-input with Submit/Decline buttons. Full street addresses NOT leaked in bidding detail. Submitting a quote posts the bid and closes the overlay. For an accepted paid job the detail switches to 'accepted' mode: earnings-breakdown visible (Customer pays / Your earnings), all four detail-status-<v> buttons present, job-detail-chat present, and full addresses revealed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_driver_job_detail.py",
+    "/app/test_reports/pytest/iter14_driver_detail.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DriverJobDetail: your_earnings % label hard-codes 85% via (1 - (commission_rate ?? 0.15)); OK today but if backend ever changes COMMISSION_RATE this is duplicated in two places (backend server.py:162 and this file). Consider surfacing commission_rate everywhere or a shared constant.",
+    "After submit-quote in the detail overlay, DriverDashboard triggers a refetch that hits /api/bookings/{id}/bids and returns 403 for the driver (customer-only endpoint) — surfaced as console error only, not user-visible, but worth suppressing or gating by role.",
+    "extract_postcode regex handles standard UK postcodes; edge case: postcodes without a space (e.g. 'SW1A2DD') would still match due to \\s* between inward/outward, good; but internal-only postcodes like 'BX1 1LT' also parse — fine.",
+    "driver_job_view sets customer_pays to my_bid||price||0 — for a fresh bidding job before any bid, customer_pays=0 so the Customer's budget box will render as '£0'. If product intent is 'customer's max budget', backend has no such field yet — currently the box is more of a placeholder until price is set."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_driver_job_detail.py (new pytest, 2 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin anisha91ahmed@gmail.com / MoveAdmin#2026. Seeded ephemeral driver TEST_ui_drv_11eef3@example.com / Drive#2026 (approved) and customer TEST_ui_cust_11eef3@example.com used for one bidding booking (MWVCE3E1AB7) and one admin-assigned accepted booking (MWVE4A1EB2A).",
+  "seed_data_creation": "1 approved driver, 1 customer, 2 bookings (one broadcast bidding, one admin-assigned).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "DriverJobDetail testids: driver-job-detail, job-detail-back, job-pickup, job-dropoff, job-map, customer-budget, crew-required, important-requirement, job-detail-quote-input, job-detail-submit-quote, job-detail-decline, earnings-breakdown, detail-status-<en_route_pickup|loading|in_transit|completed>, job-detail-chat, job-detail-photos. To reproduce quickly: register driver via /api/auth/driver-register with home_postcode 'SW1A 2DD', admin-approve; register customer, POST /api/bookings with London postcodes, then POST /api/bookings/{id}/broadcast → will appear in /api/driver/available. For accepted mode, POST /api/admin/bookings/{id}/assign — this sets payment.status='office' which is treated as paid() so driver_job_view reveals full addresses."
+}

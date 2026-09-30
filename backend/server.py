@@ -53,6 +53,7 @@ EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/
 INSTANT_RADIUS_MI = 5
 INSTANT_RADIUS_EXPANDED_MI = 10
 BIDDING_RADIUS_MI = 20
+FIXED_RADIUS_MI = 30
 VAN_ORDER = ["small", "medium", "large", "xl"]
 
 
@@ -182,7 +183,7 @@ def driver_job_view(j: dict, reveal: bool) -> dict:
         v.pop("pickup_coords", None)
         v.pop("dropoff_coords", None)
         v.pop("customer_phone", None)
-    cp = j.get("my_bid") or j.get("price") or 0
+    cp = j.get("my_bid") or j.get("price") or (j.get("quote") or {}).get("total") or 0
     v["commission_rate"] = COMMISSION_RATE
     v["customer_pays"] = round(cp, 2)
     v["your_earnings"] = round(cp * (1 - COMMISSION_RATE), 2)
@@ -363,6 +364,9 @@ async def _require_approved_driver(user: dict) -> dict:
     p = await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not p or p.get("status") != "approved":
         raise HTTPException(status_code=403, detail="Your driver account is awaiting approval")
+    bu = p.get("blocked_until")
+    if bu and bu > datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=403, detail=f"You're temporarily blocked from taking jobs until {bu[:16].replace('T', ' ')} UTC after cancelling a paid job. Please wait.")
     return p
 
 
@@ -1459,6 +1463,58 @@ async def _apply_status(booking_id, new_status):
 # ---------------------------------------------------------------------------
 # Driver surface
 # ---------------------------------------------------------------------------
+@api_router.post("/driver/jobs/{booking_id}/cancel")
+async def driver_cancel_job(booking_id: str, user: dict = Depends(require_driver)):
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b.get("driver_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your job")
+    if b["status"] in ("completed", "cancelled"):
+        raise HTTPException(status_code=400, detail="This job can no longer be cancelled")
+    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    was_paid = paid(b)
+
+    prof = await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+    penalised = False
+    blocked_until = None
+    message = "Job cancelled. Because no deposit was paid yet, there's no penalty."
+    prof_updates = {"availability": "available"}
+
+    if was_paid:
+        penalised = True
+        count = int(prof.get("penalty_cancels", 0)) + 1
+        prof_updates["penalty_cancels"] = count
+        if count == 1:
+            message = ("⚠️ You cancelled a job after the customer had paid a deposit. "
+                       "This is your first warning — if you cancel another paid job you'll be blocked from new jobs for 24 hours.")
+        elif count == 2:
+            blocked_until = (now_dt + timedelta(hours=24)).isoformat()
+            message = ("🚫 You cancelled a paid job again. You're now blocked from taking new jobs for 24 hours. "
+                       "Cancelling another paid job will block you for 48 hours.")
+        else:
+            blocked_until = (now_dt + timedelta(hours=48)).isoformat()
+            message = ("🚫 You cancelled a paid job again. You're now blocked from taking new jobs for 48 hours. "
+                       "Repeated cancellations may lead to removal from the platform.")
+        if blocked_until:
+            prof_updates["blocked_until"] = blocked_until
+
+    await db.driver_profiles.update_one({"user_id": user["user_id"]}, {"$set": prof_updates})
+
+    reassignment = {"prev_driver_id": user["user_id"], "prev_driver_name": (b.get("driver") or {}).get("name"),
+                    "reason": "Cancelled by driver", "at": now}
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "status": "quoting", "driver_id": None, "driver": None, "mode": "fixed", "fixed_price": b.get("price"),
+        "timeline": (b.get("timeline") or []) + [{"status": "quoting", "label": "Driver cancelled — finding a new driver", "at": now}],
+    }, "$push": {"reassignments": reassignment}})
+
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()), "user_id": b["user_id"], "booking_id": booking_id, "type": "driver_cancelled",
+        "title": "Your driver cancelled", "body": "We're finding you another driver. Your payment is safe.",
+        "read": False, "created_at": now,
+    })
+    return {"status": "cancelled", "penalised": penalised, "blocked_until": blocked_until, "message": message}
+
+
 @api_router.get("/driver/profile")
 async def driver_profile(user: dict = Depends(require_driver)):
     p = await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -1513,11 +1569,59 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     bid_ids = {b["booking_id"] for b in my_bids}
     out = []
     for j in open_jobs:
-        dist = driver_dist(prof, j)
-        if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
-            suggested, hours = driver_job_price(prof, j, apply_congestion=False)
-            out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
-    return out
+        try:
+            dist = driver_dist(prof, j)
+            if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
+                suggested, hours = driver_job_price(prof, j, apply_congestion=False)
+                out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
+        except Exception:
+            continue
+    # Fixed-price jobs (a driver cancelled) — first-come-first-served within 30 miles, no bidding.
+    fixed_jobs = await db.bookings.find({"driver_id": None, "mode": "fixed", "status": "quoting"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    fixed_out = []
+    for j in fixed_jobs:
+        try:
+            dist = driver_dist(prof, j)
+            if dist <= FIXED_RADIUS_MI:
+                hours = j.get("estimated_hours") or (j.get("quote") or {}).get("estimated_hours")
+                fixed_out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "est_hours": hours, "fixed_price": True})
+        except Exception:
+            continue
+    # Fixed/priority jobs first, then bidding jobs.
+    return fixed_out + out
+
+
+@api_router.post("/driver/jobs/{booking_id}/accept")
+async def driver_accept_fixed(booking_id: str, user: dict = Depends(require_driver)):
+    prof = await _require_approved_driver(user)
+    now = datetime.now(timezone.utc).isoformat()
+    # Atomic first-come claim: only succeeds if still open & fixed & unassigned.
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b.get("mode") != "fixed" or b.get("status") != "quoting" or b.get("driver_id"):
+        raise HTTPException(status_code=400, detail="This job has just been taken by another driver")
+    res = await db.bookings.update_one(
+        {"booking_id": booking_id, "mode": "fixed", "status": "quoting", "driver_id": None},
+        {"$set": {
+            "driver_id": user["user_id"],
+            "driver": {"name": prof["name"], "phone": prof["phone"], "vehicle": prof["vehicle"], "rating": prof.get("rating", 5.0)},
+            "status": "assigned",
+            "timeline": (b.get("timeline") or []) + [{"status": "assigned", "label": f"{prof['name']} accepted", "at": now}],
+        }})
+    if res.modified_count == 0:
+        raise HTTPException(status_code=400, detail="This job has just been taken by another driver")
+    await db.driver_profiles.update_one({"user_id": user["user_id"]}, {"$set": {"availability": "on_job"}})
+    updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()), "user_id": b["user_id"], "booking_id": booking_id, "type": "driver_assigned",
+        "title": "A new driver is on your job", "body": f"{prof['name']} accepted your move. Your payment carried over.",
+        "read": False, "created_at": now,
+    })
+    try:
+        if await _notify_allowed(updated["user_id"], "booking_confirmation"):
+            await send_booking_confirmation(updated)
+    except Exception as e:
+        logger.error(f"Confirmation email failed: {e}")
+    return {"status": "assigned", "message": "Job accepted — it's yours."}
 
 
 @api_router.post("/driver/jobs/{booking_id}/bid")

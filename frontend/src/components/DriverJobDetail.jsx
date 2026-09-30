@@ -9,6 +9,13 @@ import { Input } from "@/components/ui/input";
 
 const GMAPS_KEY = process.env.REACT_APP_GMAPS_KEY;
 
+function fmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(d + "T00:00:00");
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
 function floorLabel(floor, lift) {
   if (lift) return "Lift";
   if (!floor || floor === 0) return "Ground floor";
@@ -25,7 +32,7 @@ function stairsWarning(job) {
   return null;
 }
 
-export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, DRIVER_STEPS, LABEL }) {
+export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, DRIVER_STEPS, LABEL }) {
   const [price, setPrice] = useState(job.suggested_price || job.my_bid || "");
   const dist = job.distance_mi ?? job.distance_miles;
   const hours = job.est_hours ?? job.estimated_hours;
@@ -51,7 +58,7 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, D
         {/* Date & time */}
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-amber-500 mb-1">Date and time</p>
-          <p className="flex items-center gap-2 text-slate-800 font-medium"><Calendar className="h-4 w-4 text-slate-400" /> {job.date} · {job.time}</p>
+          <p className="flex items-center gap-2 text-slate-800 font-medium"><Calendar className="h-4 w-4 text-slate-400" /> {fmtDate(job.date)}, {job.time}</p>
         </div>
 
         {/* Pickup / dropoff chips */}
@@ -83,15 +90,25 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, D
           {dist != null && <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"><MapPin className="h-4 w-4" /> {dist} mi</span>}
         </div>
 
-        {/* Customer budget (bidding) */}
+        {/* Customer budget (bidding) / fixed price */}
         {mode === "quotation" && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-3" data-testid="customer-budget">
-            <Wallet className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-heading font-bold text-emerald-800">Customer's budget: £{(job.customer_pays || 0).toFixed(0)}</p>
-              <p className="text-sm text-emerald-700">Tailor your quote to win this job</p>
+          job.fixed_price ? (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 flex items-start gap-3" data-testid="fixed-price-badge">
+              <Wallet className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-heading font-bold text-emerald-800">Fixed price: £{(job.customer_pays || 0).toFixed(0)}</p>
+                <p className="text-sm text-emerald-700">Priority job — no bidding. First driver to accept gets it.</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-3" data-testid="customer-budget">
+              <Wallet className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-heading font-bold text-emerald-800">Customer's budget: £{(job.customer_pays || 0).toFixed(0)}</p>
+                <p className="text-sm text-emerald-700">Tailor your quote to win this job</p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Crew required */}
@@ -167,19 +184,32 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, D
 
         {/* Actions */}
         {mode === "quotation" && (
-          <div className="border-t border-slate-200 pt-4 space-y-3">
-            <div>
-              <p className="text-xs text-slate-500 mb-1.5">Your quote (you keep {Math.round((1 - (job.commission_rate ?? 0.15)) * 100)}% — £{((Number(price) || 0) * (1 - (job.commission_rate ?? 0.15))).toFixed(2)})</p>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
-                <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7 h-12 text-lg" data-testid="job-detail-quote-input" />
+          job.fixed_price ? (
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-heading font-bold text-slate-900">You'll earn</span>
+                <span className="font-heading font-bold text-emerald-600">£{(job.your_earnings || 0).toFixed(2)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button onClick={() => onAccept(job.booking_id)} className="bg-emerald-600 hover:bg-emerald-700 h-12" data-testid="job-detail-accept"><CheckCircle2 className="h-4 w-4 mr-2" /> Accept job</Button>
+                <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
-              <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
+          ) : (
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <div>
+                <p className="text-xs text-slate-500 mb-1.5">Your quote (you keep {Math.round((1 - (job.commission_rate ?? 0.15)) * 100)}% — £{((Number(price) || 0) * (1 - (job.commission_rate ?? 0.15))).toFixed(2)})</p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
+                  <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7 h-12 text-lg" data-testid="job-detail-quote-input" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
+                <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {mode === "waiting" && (
@@ -200,6 +230,7 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, D
               </div>
             </div>
             <Button onClick={() => onChat(job.booking_id)} variant="outline" className="w-full h-11" data-testid="job-detail-chat"><Send className="h-4 w-4 mr-2" /> Message customer</Button>
+            <Button onClick={() => onCancel(job)} variant="ghost" className="w-full h-11 text-red-600 hover:text-red-700 hover:bg-red-50" data-testid="job-detail-cancel">Cancel this job</Button>
           </div>
         )}
       </div>

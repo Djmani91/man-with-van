@@ -57,9 +57,27 @@ export default function DriverDashboard() {
     try { await api.post(`/driver/jobs/${id}/bid`, { price: Number(price) }); toast.success("Bid sent — awaiting customer decision"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
+  const acceptJob = async (id) => {
+    try { const { data } = await api.post(`/driver/jobs/${id}/accept`); toast.success(data.message || "Job accepted"); setDetail(null); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); load(); }
+  };
   const setStatus = async (id, status) => {
     try { await api.post(`/driver/jobs/${id}/status`, { status }); toast.success("Status updated"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const cancelJob = async (job) => {
+    const warn = paid => paid
+      ? "The customer has PAID a deposit for this job.\n\nCancelling now counts against you:\n• 1st time: warning\n• 2nd time: blocked from jobs for 24 hours\n• 3rd time: blocked for 48 hours\n\nAre you sure you want to cancel?"
+      : "Are you sure you want to cancel this job? It will be offered to other drivers.";
+    if (!window.confirm(warn(job.deposit_paid))) return;
+    try {
+      const { data } = await api.post(`/driver/jobs/${job.booking_id}/cancel`);
+      setDetail(null);
+      if (data.blocked_until) toast.error(data.message, { duration: 9000 });
+      else if (data.penalised) toast.warning(data.message, { duration: 9000 });
+      else toast.success(data.message);
+      load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const toggleAvailability = async (v) => {
     try { const { data } = await api.post("/driver/availability", { available: v }); setProfile((p) => ({ ...p, availability: data.availability })); }
@@ -90,6 +108,13 @@ export default function DriverDashboard() {
           </div>
         )}
 
+        {profile?.blocked_until && profile.blocked_until > new Date().toISOString() && (
+          <div className="rounded-xl p-4 mb-4 flex items-center gap-3 bg-red-50 border border-red-200" data-testid="driver-blocked-banner">
+            <ShieldAlert className="h-6 w-6 text-red-600 shrink-0" />
+            <div><p className="font-semibold text-slate-900 text-sm">Temporarily blocked from new jobs</p><p className="text-xs text-slate-600">You cancelled a paid job. You can take new jobs again after {new Date(profile.blocked_until).toLocaleString("en-GB")}.</p></div>
+          </div>
+        )}
+
         <Tabs defaultValue="quotation" className="w-full">
           <TabsList className="grid grid-cols-4 w-full" data-testid="driver-tabs">
             <TabsTrigger value="quotation" data-testid="dtab-quotation" className="text-xs">Quotation {available.length > 0 && <span className="ml-1 text-primary font-bold">{available.length}</span>}</TabsTrigger>
@@ -104,7 +129,7 @@ export default function DriverDashboard() {
               : available.length === 0 ? <Empty icon={Route} text="No open jobs right now. Check back soon." />
               : available.map((j) => (
                 <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })}>
-                  <BidRow job={j} onBid={sendQuote} />
+                  {j.fixed_price ? <AcceptRow job={j} onAccept={acceptJob} /> : <BidRow job={j} onBid={sendQuote} />}
                 </JobCard>
               ))}
           </TabsContent>
@@ -162,7 +187,7 @@ export default function DriverDashboard() {
         <DriverJobDetail
           job={detail.job} mode={detail.mode}
           onClose={() => setDetail(null)}
-          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }}
+          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }} onCancel={cancelJob} onAccept={acceptJob}
           DRIVER_STEPS={DRIVER_STEPS} LABEL={LABEL}
         />
       )}
@@ -209,6 +234,18 @@ const Row = ({ icon: Icon, label, value }) => (
     <span className="font-medium text-slate-900">{value}</span>
   </div>
 );
+
+function AcceptRow({ job, onAccept }) {
+  return (
+    <div className="mt-3" data-testid={`accept-row-${job.booking_id}`}>
+      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 mb-2">
+        <PoundSterling className="h-4 w-4 text-emerald-600 shrink-0" />
+        <p className="text-xs font-semibold text-emerald-800">Fixed price · £{(job.customer_pays || 0).toFixed(0)} — no bidding. First to accept gets the job.</p>
+      </div>
+      <Button onClick={() => onAccept(job.booking_id)} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-1.5" data-testid={`accept-${job.booking_id}`}><CheckCircle2 className="h-4 w-4" /> Accept job (£{(job.your_earnings || 0).toFixed(2)})</Button>
+    </div>
+  );
+}
 
 function BidRow({ job, onBid }) {
   const [price, setPrice] = useState(job.suggested_price || "");

@@ -70,3 +70,30 @@
   a real charge occurs (not on reassignment/already-paid). Shows deposit vs full, amount paid
   now, total, customer, driver. Send-only, failure-safe.
 - Verified: sample payment alert delivered to chat 5811928111.
+
+## 2026-06 — Driver job-detail view (matches mobile app) + congestion fee
+- Congestion fee: £15 auto-added to hourly-rate quotes (website estimate + instant offers +
+  office/admin assign). Excluded from custom bids (bidders set own price) and the bidding
+  "suggested price". compute_quote returns congestion_fee; wizard shows "Includes £15..." line.
+- New DriverJobDetail.jsx: full-screen job detail opened when a driver taps a job — DATE AND TIME
+  (amber), postcode-only pickup/dropoff chips (green/purple dots) with "Full address revealed
+  after deposit payment", Google Maps Embed route (REACT_APP_GMAPS_KEY), duration+distance chips,
+  customer budget (bidding) / earnings breakdown (Customer pays / Your earnings = 85%), crew
+  required box, pickup/dropoff floor lines, amber "Important requirement" stairs warning,
+  customer item photos & notes, and quote/status/message actions.
+- Backend driver_job_view(): postcode extraction, address hidden until deposit paid
+  (deposit_paid), your_earnings = price*0.85, commission_rate=0.15. Applied to
+  /driver/available, /driver/requests, /driver/jobs. COMMISSION_RATE=0.15.
+- Verified: iteration_14 100% backend+frontend (pytest 2/2 + full UI flow).
+
+## 2026-06 — Driver cancel + escalating penalty + fixed-price re-offer
+- Driver can cancel any job. POST /api/driver/jobs/{id}/cancel:
+  - If customer had PAID: escalating penalty — 1st = warning, 2nd = blocked 24h, 3rd+ = blocked 48h
+    (driver_profiles.penalty_cancels + blocked_until). _require_approved_driver blocks jobs while blocked_until is in future.
+  - If unpaid: free cancel, no penalty.
+  - Frontend: confirm() warning before cancelling a paid job; toast shows the penalty message; red "Temporarily blocked" banner on dashboard.
+- Cancelled job goes back to marketplace as FIXED PRICE (mode="fixed", price kept from the cancelling driver's agreed price). No bidding. First-come-first-served.
+  - /driver/available now also returns fixed jobs within 30 mi (FIXED_RADIUS_MI), flagged fixed_price=True, shown first (priority).
+  - POST /api/driver/jobs/{id}/accept: atomic first-come claim; payment carries over (no new charge); whoever accepts first wins, others get "just been taken".
+  - Driver UI: fixed jobs show an "Accept job (£earnings)" button instead of a bid input; detail view shows "Fixed price" priority badge + Accept.
+- Verified via curl: cancel escalation 1/2/3 (warning/24h/48h), cancel→fixed conversion, B sees fixed £60 (earns £51, 30mi), B accepts, A gets "taken".
