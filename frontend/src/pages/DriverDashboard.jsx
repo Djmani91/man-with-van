@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Package, Clock,
-  ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route,
+  ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";

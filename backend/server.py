@@ -362,8 +362,9 @@ async def register(data: RegisterInput, response: Response):
             "phone": data.phone, "role": "customer", "password_hash": hash_password(data.password),
             "picture": None, "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(user)
-    set_session_cookie(response, await create_session(user["user_id"]))
-    return public_user(user)
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {**public_user(user), "token": token}
 
 
 @api_router.post("/auth/driver-register")
@@ -387,8 +388,9 @@ async def driver_register(data: DriverRegisterInput, response: Response):
         "status": "pending", "availability": "available",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    set_session_cookie(response, await create_session(user["user_id"]))
-    return public_user(user)
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {**public_user(user), "token": token}
 
 
 @api_router.post("/auth/login")
@@ -397,8 +399,9 @@ async def login(data: LoginInput, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not user.get("password_hash") or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    set_session_cookie(response, await create_session(user["user_id"]))
-    return public_user(user)
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {**public_user(user), "token": token}
 
 
 @api_router.post("/auth/session")
@@ -420,8 +423,9 @@ async def google_session(request: Request, response: Response):
         await db.users.insert_one(user)
     else:
         await db.users.update_one({"email": email}, {"$set": {"picture": data.get("picture"), "name": user.get("name") or data.get("name", "")}})
-    set_session_cookie(response, await create_session(user["user_id"]))
-    return public_user(user)
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {**public_user(user), "token": token}
 
 
 @api_router.post("/auth/logout")
