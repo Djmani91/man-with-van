@@ -16,3 +16,7 @@ export const savePromo = (code) => {
 export const loadPromo = () => {
   try { return localStorage.getItem(PROMO_STORAGE_KEY) || ""; } catch { return ""; }
 };
+
+export const clearPromo = () => {
+  try { localStorage.removeItem(PROMO_STORAGE_KEY); } catch { /* noop */ }
+};

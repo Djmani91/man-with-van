@@ -363,3 +363,77 @@ class TestUpload:
         r = customer["session"].post(f"{API}/upload",
                                      files={"file": ("t.png", io.BytesIO(png), "image/png")})
         assert r.status_code == 200 and r.json()["path"].endswith(".png")
+
+
+# ---------------- Student promo (STUDENT10) ----------------
+class TestPromo:
+    def test_validate_promo_valid_upper(self):
+        r = requests.get(f"{API}/promo/STUDENT10")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is True
+        assert data["discount_pct"] == 0.10
+        assert "label" in data and data["label"]
+
+    def test_validate_promo_case_insensitive(self):
+        r = requests.get(f"{API}/promo/student10")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is True
+        assert data["discount_pct"] == 0.10
+
+    def test_validate_promo_invalid(self):
+        r = requests.get(f"{API}/promo/INVALID")
+        assert r.status_code == 200
+        assert r.json()["valid"] is False
+
+    def test_booking_with_student_promo_stores_fields(self, customer):
+        r = customer["session"].post(f"{API}/bookings", json={
+            "pickup": "SW1A 1AA London", "dropoff": "M1 1AE Manchester",
+            "van_size": "large", "date": TOMORROW, "time": "10:00",
+            "customer_name": "Test C", "customer_phone": "07123456789",
+            "promo_code": "STUDENT10",
+        })
+        assert r.status_code == 200, r.text
+        b = r.json()
+        assert b["promo_code"] == "STUDENT10"
+        assert b["promo_discount_pct"] == 0.10
+        # verify persistence
+        g = customer["session"].get(f"{API}/bookings/{b['booking_id']}").json()
+        assert g["promo_code"] == "STUDENT10"
+        assert g["promo_discount_pct"] == 0.10
+
+    def test_booking_with_lowercase_promo_normalizes(self, customer):
+        r = customer["session"].post(f"{API}/bookings", json={
+            "pickup": "SW1A 1AA London", "dropoff": "M1 1AE Manchester",
+            "van_size": "large", "date": TOMORROW, "time": "10:00",
+            "customer_name": "Test C", "customer_phone": "07123456789",
+            "promo_code": "student10",
+        })
+        assert r.status_code == 200
+        b = r.json()
+        assert b["promo_code"] == "STUDENT10"
+        assert b["promo_discount_pct"] == 0.10
+
+    def test_booking_with_invalid_promo_no_discount(self, customer):
+        r = customer["session"].post(f"{API}/bookings", json={
+            "pickup": "SW1A 1AA London", "dropoff": "M1 1AE Manchester",
+            "van_size": "large", "date": TOMORROW, "time": "10:00",
+            "customer_name": "Test C", "customer_phone": "07123456789",
+            "promo_code": "NOPE",
+        })
+        assert r.status_code == 200
+        b = r.json()
+        assert b["promo_code"] is None
+        assert b["promo_discount_pct"] == 0.0
+
+    def test_booking_without_promo(self, customer):
+        r = customer["session"].post(f"{API}/bookings", json={
+            "pickup": "SW1A 1AA London", "dropoff": "M1 1AE Manchester",
+            "van_size": "large", "date": TOMORROW, "time": "10:00",
+            "customer_name": "Test C", "customer_phone": "07123456789",
+        })
+        assert r.status_code == 200
+        b = r.json()
+        assert b["promo_code"] is None
+        assert b["promo_discount_pct"] == 0.0

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
-import { getPromo, loadPromo, savePromo } from "@/lib/promo";
+import { getPromo, loadPromo, savePromo, clearPromo } from "@/lib/promo";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -263,7 +263,7 @@ export const BookingWizard = ({ compact = true }) => {
                   <div className="space-y-2">
                     <Label>Promo code <span className="text-slate-400 font-normal">(optional)</span></Label>
                     <Input value={form.promo_code}
-                      onChange={(e) => { const v = e.target.value.toUpperCase(); set("promo_code", v); if (getPromo(v)) savePromo(v); }}
+                      onChange={(e) => { const v = e.target.value.toUpperCase(); set("promo_code", v); if (getPromo(v)) savePromo(v); else if (!v) clearPromo(); }}
                       placeholder="e.g. STUDENT10" className="focus:ring-2 focus:ring-violet-500 uppercase" data-testid="wizard-promo" />
                     {form.promo_code && (promo
                       ? <p className="text-xs font-medium text-emerald-600 flex items-center gap-1" data-testid="wizard-promo-valid"><Check className="h-3.5 w-3.5" /> {promo.label} applied — {Math.round(promo.pct * 100)}% off your total</p>
