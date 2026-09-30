@@ -58,7 +58,7 @@ export const Navbar = () => {
               <DropdownMenuContent align="end" className="w-48">
                 {user.role === "admin" && <DropdownMenuItem onClick={() => navigate("/admin")} data-testid="nav-admin-link"><LayoutDashboard className="h-4 w-4 mr-2" /> Dispatch</DropdownMenuItem>}
                 {user.role === "driver" && <DropdownMenuItem onClick={() => navigate("/driver")} data-testid="nav-driver-link"><Truck className="h-4 w-4 mr-2" /> Driver hub</DropdownMenuItem>}
-                <DropdownMenuItem onClick={() => navigate("/account")} data-testid="nav-bookings-link"><User className="h-4 w-4 mr-2" /> My moves</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/jobs")} data-testid="nav-bookings-link"><User className="h-4 w-4 mr-2" /> My moves</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={async () => { await logout(); navigate("/"); }} data-testid="nav-logout"><LogOut className="h-4 w-4 mr-2" /> Log out</DropdownMenuItem>
               </DropdownMenuContent>

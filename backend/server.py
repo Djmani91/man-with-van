@@ -215,10 +215,26 @@ async def create_session(user_id: str) -> str:
     return token
 
 
+DEFAULT_NOTIFY_PREFS = {"booking_confirmation": True, "status_update": True}
+
+
+def notify_prefs(u: dict) -> dict:
+    p = u.get("notify_prefs") or {}
+    return {k: bool(p.get(k, v)) for k, v in DEFAULT_NOTIFY_PREFS.items()}
+
+
+async def _notify_allowed(user_id: str, key: str) -> bool:
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "notify_prefs": 1})
+    if not u:
+        return True
+    return notify_prefs(u).get(key, True)
+
+
 def public_user(u: dict) -> dict:
     return {"user_id": u["user_id"], "email": u["email"], "name": u.get("name", ""),
             "role": u.get("role", "customer"), "picture": u.get("picture"), "phone": u.get("phone"),
-            "referral_code": u.get("referral_code"), "referral_credit": round(u.get("referral_credit", 0.0), 2)}
+            "referral_code": u.get("referral_code"), "referral_credit": round(u.get("referral_credit", 0.0), 2),
+            "notify_prefs": notify_prefs(u)}
 
 
 async def gen_referral_code() -> str:
@@ -370,6 +386,11 @@ class StatusInput(BaseModel):
     status: str
 
 
+class NotifyPrefsInput(BaseModel):
+    booking_confirmation: bool = True
+    status_update: bool = True
+
+
 class AvailabilityInput(BaseModel):
     available: bool
 
@@ -502,6 +523,13 @@ async def logout(request: Request, response: Response):
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return public_user(user)
+
+
+@api_router.put("/account/notifications")
+async def update_notifications(data: NotifyPrefsInput, user: dict = Depends(get_current_user)):
+    prefs = {"booking_confirmation": data.booking_confirmation, "status_update": data.status_update}
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"notify_prefs": prefs}})
+    return {"notify_prefs": prefs}
 
 
 @api_router.get("/referral/me")
@@ -893,7 +921,8 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
         "read": False, "created_at": now,
     })
     try:
-        await send_booking_confirmation(updated)
+        if await _notify_allowed(updated["user_id"], "booking_confirmation"):
+            await send_booking_confirmation(updated)
     except Exception as e:
         logger.error(f"Confirmation email failed: {e}")
     return updated
@@ -1109,7 +1138,8 @@ async def admin_assign(booking_id: str, data: AssignInput, user: dict = Depends(
     await db.driver_profiles.update_one({"user_id": prof["user_id"]}, {"$set": {"availability": "on_job"}})
     updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     try:
-        await send_booking_confirmation(updated)
+        if await _notify_allowed(updated["user_id"], "booking_confirmation"):
+            await send_booking_confirmation(updated)
     except Exception as e:
         logger.error(f"Confirmation email failed: {e}")
     return updated
@@ -1147,7 +1177,8 @@ async def _apply_status(booking_id, new_status):
         await db.driver_profiles.update_one({"user_id": b["driver_id"]}, {"$set": {"availability": "available"}})
     updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     try:
-        await send_status_update(updated)
+        if await _notify_allowed(updated["user_id"], "status_update"):
+            await send_status_update(updated)
     except Exception as e:
         logger.error(f"Status email failed: {e}")
     return updated

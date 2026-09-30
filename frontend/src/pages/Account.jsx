@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Truck, MapPin, Calendar, ArrowRight, Plus, PackageOpen } from "lucide-react";
+import { Truck, MapPin, Calendar, ArrowRight, Plus, PackageOpen, Bell } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/Navbar";
@@ -8,6 +8,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { ReferralCard } from "@/components/ReferralCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 const STATUS_STYLE = {
   confirmed: "bg-violet-100 text-violet-700",
@@ -24,11 +26,31 @@ const STATUS_LABEL = {
 };
 
 export default function Account() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(null);
+  const [prefs, setPrefs] = useState(user?.notify_prefs || { booking_confirmation: true, status_update: true });
+  const [savingPref, setSavingPref] = useState(null);
 
   useEffect(() => { api.get("/bookings").then(({ data }) => setBookings(data)).catch(() => setBookings([])); }, []);
+  useEffect(() => { if (user?.notify_prefs) setPrefs(user.notify_prefs); }, [user]);
+
+  const savePref = async (key, value) => {
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+    setSavingPref(key);
+    try {
+      const { data } = await api.put("/account/notifications", next);
+      setPrefs(data.notify_prefs);
+      if (setUser && user) setUser({ ...user, notify_prefs: data.notify_prefs });
+      toast.success("Notification settings saved");
+    } catch {
+      setPrefs(prefs);
+      toast.error("Couldn't save — please try again");
+    } finally {
+      setSavingPref(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -45,6 +67,44 @@ export default function Account() {
         </div>
 
         <div className="mt-8"><ReferralCard /></div>
+
+        <div className="mt-8 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6" data-testid="notification-settings">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+              <Bell className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-heading font-semibold text-slate-900">Email notifications</h2>
+              <p className="text-sm text-slate-500">Choose which emails we send you.</p>
+            </div>
+          </div>
+          <div className="mt-5 divide-y divide-slate-100">
+            <div className="flex items-center justify-between py-3">
+              <div className="pr-4">
+                <p className="text-sm font-medium text-slate-800">Booking confirmations</p>
+                <p className="text-xs text-slate-500">When a driver is assigned and your move is confirmed.</p>
+              </div>
+              <Switch
+                checked={prefs.booking_confirmation}
+                disabled={savingPref === "booking_confirmation"}
+                onCheckedChange={(v) => savePref("booking_confirmation", v)}
+                data-testid="pref-booking-confirmation"
+              />
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <div className="pr-4">
+                <p className="text-sm font-medium text-slate-800">Move status updates</p>
+                <p className="text-xs text-slate-500">En route, loading, in transit, completed and more.</p>
+              </div>
+              <Switch
+                checked={prefs.status_update}
+                disabled={savingPref === "status_update"}
+                onCheckedChange={(v) => savePref("status_update", v)}
+                data-testid="pref-status-update"
+              />
+            </div>
+          </div>
+        </div>
 
         <div className="mt-8 space-y-4" data-testid="bookings-list">
           {bookings === null && <p className="text-slate-400">Loading…</p>}
