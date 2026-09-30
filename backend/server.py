@@ -834,7 +834,7 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
         raise HTTPException(status_code=400, detail="Invalid payment type")
 
     now = datetime.now(timezone.utc).isoformat()
-    already_paid = (b.get("payment") or {}).get("status") == "paid"
+    already_paid = (b.get("payment") or {}).get("status") in ("paid", "office")
 
     if already_paid:
         # Reassignment after a "change driver" request — payment stays, no new charge.

@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 11 — verified pending driver visibility/search, cancel-with-refund, admin mark-refunded, change-driver reassignment (no-double-charge), and Track UI states (manage / searching / refund). Backend: 9/9 pytest cases pass covering cancel(paid & unpaid), admin refund happy+error path, change-driver → quoting/reassignments[]/driver freed/payment preserved, and select-driver reassignment with NO source_id keeping payment.status='paid' + transaction_id unchanged (proving Square is NOT called). Frontend: admin drivers tab shows pending row with email + 0/4 docs + Approve, driver-search filters to that row; admin-job-modal opens on cancelled row and shows admin-refund-box with 'Refund requested' → clicking admin-mark-refunded flips to Refunded; customer /track/{id} shows track-manage on assigned booking, track-searching on quoting-paid, track-refund-status on cancelled-paid; ReasonDialog opens on change-driver, confirm hits API + navigates to /jobs; MyJobs Accept on the already-paid reassigned booking assigns WITHOUT opening any payment modal / Square iframe.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cancel_and_reassign.py",
+    "/app/backend/tests/seed_iter11.py",
+    "/app/test_reports/pytest/iter11_cancel.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note (not a bug for this iteration): POST /api/admin/bookings/{id}/assign sets payment.status='office' (not 'paid'). The 'no-double-charge' reassignment path in _assign_and_pay checks status=='paid'. That means admin-assigned bookings could NOT be safely re-selected without a card token. For tests we set payment.status='paid' via Mongo to simulate a Square-paid booking. Consider either (a) treating 'office' as already_paid to avoid a double charge if the customer later requests change-driver on an office booking, OR (b) leaving as-is and never exposing change-driver to office bookings on the customer UI. Currently the customer /track page shows Change driver on ANY assigned booking regardless of payment type — an office booking that goes through change-driver → select-driver would fail with 'Payment details required' unless credit covers it.",
+    "server.py at 1309 lines — still recommend splitting into auth/admin/driver/bookings modules.",
+    "cancel_booking uses pay.get('card_charged', pay.get('amount', 0)) for refund amount — for office bookings (amount 0) refund would be £0 which is correct (no card to refund), but the customer UI still shows 'Refund requested — we'll process this back to your card' which could confuse a cash/office customer. Consider gating the refund UI on pay.type !== 'office'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cancel_and_reassign.py",
+    "/app/backend/tests/seed_iter11.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin anisha91ahmed@gmail.com / MoveAdmin#2026. Seed customers: TEST_ui_167e19@example.com (assigned+paid MWV1AC8E690), TEST_ui_d9391e@example.com (cancelled+refunded MWV36A9C8F2), TEST_ui_9b6329@example.com (quoting+paid MWV51621EDF). Pending driver TEST_dr_489b76f0@example.com (id user_2ab969fcf8af). All customers use password Test#2026.",
+  "seed_data_creation": "seed_iter11.py creates 3 customers + 3 drivers + 3 bookings (assigned+paid / cancelled+paid+refund-requested / quoting+paid) and 1 pending-no-photo driver for admin UI verification. During UI test the cancelled booking was flipped to refunded via admin-mark-refunded click.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Endpoints verified: POST /bookings/{id}/cancel (paid → payment.refund.status='requested' + amount=card_charged + reason; unpaid → refund_requested=false; driver freed via availability='available'); POST /bookings/{id}/change-driver (assigned+has-driver → status='quoting', driver_id/driver cleared, reassignments[] pushed with prev_driver_id+reason, timeline appended, previous driver's availability='available', payment.status preserved); POST /admin/bookings/{id}/refund (requires refund.status='requested', flips to 'refunded' + processed_at, 400 otherwise); POST /bookings/{id}/select-driver with only {driver_id} on an already-paid booking triggers already_paid branch in _assign_and_pay (no Square call, transaction_id preserved). Frontend test-ids verified: driver-row-<id>, driver-email-<id>, docs-<id>, driver-search, approve-<id>, admin-job-modal, admin-refund-box, admin-mark-refunded, track-manage, track-change-driver, track-cancel, track-searching, track-choose-driver, track-refund-status, reason-dialog, reason-<slug>, reason-confirm. Because Square is LIVE, to reproduce a paid state without charging a card, use seed_iter11.py's _mongo_set_payment_paid helper (writes {status:'paid', transaction_id:'TEST_TXN_...'} directly to db.bookings). Admin manual-assign alone sets payment.status='office' which does NOT satisfy _assign_and_pay's already_paid check — flagged in review comments.",
+  "rca of the issue": "N/A — the original 'pending driver missing from admin' is confirmed environmental (different DB between prod mobile writes and admin reads). This run confirms the CODE always returns pending drivers (including those with zero photos) from /admin/drivers with email joined + status='pending', and the client-side driver-search filters over email/name/phone/vehicle correctly."
+}
