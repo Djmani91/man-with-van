@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
+import { ReferralCard } from "@/components/ReferralCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -42,6 +43,8 @@ export default function Account() {
             <Plus className="h-4 w-4" /> New booking
           </Button>
         </div>
+
+        <div className="mt-8"><ReferralCard /></div>
 
         <div className="mt-8 space-y-4" data-testid="bookings-list">
           {bookings === null && <p className="text-slate-400">Loading…</p>}

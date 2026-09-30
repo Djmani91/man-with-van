@@ -25,7 +25,7 @@ function loadSquareSdk() {
   return sdkPromise;
 }
 
-export function SquarePaymentModal({ open, onOpenChange, amount, payType, driverName, onToken }) {
+export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied = 0, payType, driverName, onToken }) {
   const cardRef = useRef(null);
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -91,6 +91,12 @@ export function SquarePaymentModal({ open, onOpenChange, amount, payType, driver
             <span className="text-sm text-slate-600">Amount to pay now</span>
             <span className="font-heading text-2xl font-bold text-primary" data-testid="square-amount">£{amount.toFixed(2)}</span>
           </div>
+
+          {creditApplied > 0 && (
+            <p className="text-xs font-medium text-emerald-600 -mt-2" data-testid="square-credit">
+              £{creditApplied.toFixed(2)} referral credit applied
+            </p>
+          )}
 
           {!ready && !error && (
             <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">

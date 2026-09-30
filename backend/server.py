@@ -53,6 +53,8 @@ INSTANT_RADIUS_MI = 5
 BIDDING_RADIUS_MI = 30
 DEPOSIT_PCT = 0.15
 PROMO_CODES = {"STUDENT10": {"pct": 0.10, "label": "Student 10% off"}}
+REFERRAL_REWARD = 5.0  # £ credit for referrer and friend on friend's first paid booking
+MIN_CARD_CHARGE = 0.50  # never charge a card below this (Square minimum guard)
 
 # ---------------------------------------------------------------------------
 # Van pricing + thresholds
@@ -207,7 +209,29 @@ async def create_session(user_id: str) -> str:
 
 def public_user(u: dict) -> dict:
     return {"user_id": u["user_id"], "email": u["email"], "name": u.get("name", ""),
-            "role": u.get("role", "customer"), "picture": u.get("picture"), "phone": u.get("phone")}
+            "role": u.get("role", "customer"), "picture": u.get("picture"), "phone": u.get("phone"),
+            "referral_code": u.get("referral_code"), "referral_credit": round(u.get("referral_credit", 0.0), 2)}
+
+
+async def gen_referral_code() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous chars
+    for _ in range(20):
+        code = "".join(secrets.choice(alphabet) for _ in range(6))
+        if not await db.users.find_one({"referral_code": code}):
+            return code
+    return "R" + uuid.uuid4().hex[:6].upper()
+
+
+async def resolve_referrer(ref: Optional[str], new_user_id: str) -> Optional[str]:
+    if not ref:
+        return None
+    ref = ref.strip().upper()
+    if not ref:
+        return None
+    referrer = await db.users.find_one({"referral_code": ref})
+    if referrer and referrer["user_id"] != new_user_id:
+        return referrer["user_id"]
+    return None
 
 
 async def get_current_user(request: Request) -> dict:
@@ -262,6 +286,7 @@ class RegisterInput(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     phone: Optional[str] = None
+    ref: Optional[str] = None  # referral code of the friend who invited them
 
 
 class PricingInput(BaseModel):
@@ -370,9 +395,13 @@ async def register(data: RegisterInput, response: Response):
     email = data.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="An account with this email already exists")
-    user = {"user_id": f"user_{uuid.uuid4().hex[:12]}", "email": email, "name": data.name.strip(),
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    referred_by = await resolve_referrer(data.ref, user_id)
+    user = {"user_id": user_id, "email": email, "name": data.name.strip(),
             "phone": data.phone, "role": "customer", "password_hash": hash_password(data.password),
-            "picture": None, "created_at": datetime.now(timezone.utc).isoformat()}
+            "picture": None, "referral_code": await gen_referral_code(),
+            "referral_credit": 0.0, "referred_by": referred_by, "referral_rewarded": False,
+            "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(user)
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
@@ -452,6 +481,23 @@ async def logout(request: Request, response: Response):
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return public_user(user)
+
+
+@api_router.get("/referral/me")
+async def my_referral(user: dict = Depends(get_current_user)):
+    code = user.get("referral_code")
+    if not code:
+        code = await gen_referral_code()
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referral_code": code}})
+    referred_count = await db.users.count_documents({"referred_by": user["user_id"]})
+    rewarded_count = await db.users.count_documents({"referred_by": user["user_id"], "referral_rewarded": True})
+    return {
+        "code": code,
+        "credit": round(user.get("referral_credit", 0.0), 2),
+        "reward_each": REFERRAL_REWARD,
+        "referred_count": referred_count,
+        "rewarded_count": rewarded_count,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -748,7 +794,25 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
     price = round(original_price - discount_amount, 2)
     deposit = round(price * DEPOSIT_PCT, 2)
     amount = deposit if payment_type == "deposit" else price
-    square_payment_id = await _charge_square(amount, booking_id, payment_type, source_id)
+
+    # Apply the customer's referral credit against what's charged now (after promo).
+    customer = await db.users.find_one({"user_id": customer_id})
+    available_credit = round((customer or {}).get("referral_credit", 0.0), 2)
+    credit_applied = min(available_credit, amount)
+    if amount - credit_applied < MIN_CARD_CHARGE:
+        credit_applied = round(max(0.0, amount - MIN_CARD_CHARGE), 2)
+    charge_amount = round(amount - credit_applied, 2)
+
+    square_payment_id = await _charge_square(charge_amount, booking_id, payment_type, source_id)
+
+    # Deduct the credit that was used.
+    if credit_applied > 0:
+        await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": -credit_applied}})
+    # Reward both parties on the friend's first paid booking.
+    if customer and customer.get("referred_by") and not customer.get("referral_rewarded"):
+        await db.users.update_one({"user_id": customer["referred_by"]}, {"$inc": {"referral_credit": REFERRAL_REWARD}})
+        await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": REFERRAL_REWARD}, "$set": {"referral_rewarded": True}})
+
     now = datetime.now(timezone.utc).isoformat()
     timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
                 {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
@@ -760,7 +824,8 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
         "payment": {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
                     "balance_due": round(price - amount, 2), "paid_at": now,
                     "transaction_id": square_payment_id, "provider": "square",
-                    "original_price": original_price, "promo_code": promo_code, "discount": discount_amount},
+                    "original_price": original_price, "promo_code": promo_code, "discount": discount_amount,
+                    "credit_applied": credit_applied, "card_charged": charge_amount},
         "timeline": timeline, "mode": b.get("mode") or "instant",
     }})
     await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})

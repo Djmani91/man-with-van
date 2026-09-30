@@ -9,6 +9,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Seo } from "@/components/Seo";
 import { BookingWizard } from "@/components/BookingWizard";
+import { ReferralCard } from "@/components/ReferralCard";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { STUDENT_CODE, STUDENT_PCT, savePromo } from "@/lib/promo";
@@ -186,6 +187,30 @@ export default function StudentDiscountPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* UNIVERSITIES */}
+      <section className="max-w-7xl mx-auto px-5 sm:px-8 py-10">
+        <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 text-center">Student man &amp; van near your university</h2>
+        <p className="text-slate-500 text-center mt-3 max-w-2xl mx-auto">Cheap man with a van for students at universities across the UK — halls, house shares and flats, moved the same day near your campus.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-8">
+          {[
+            "UCL", "King's College London", "Imperial College London", "LSE",
+            "Queen Mary University of London", "University of Westminster", "City, University of London", "SOAS",
+            "University of Manchester", "University of Leeds", "University of Birmingham", "University of Nottingham",
+            "University of Bristol", "University of Edinburgh", "University of Sheffield", "University of Warwick",
+          ].map((uni) => (
+            <div key={uni} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-2 text-sm font-medium text-slate-700 hover:border-violet-300 transition-colors" data-testid={`uni-${uni.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+              <GraduationCap className="h-4 w-4 text-primary shrink-0" /> <span className="truncate">Man &amp; van near {uni}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-slate-500 text-center mt-6 text-sm max-w-2xl mx-auto">Studying somewhere else? We cover every UK university city and postcode — just enter your address for an instant student quote with {PCT}% off.</p>
+      </section>
+
+      {/* REFER A FLATMATE */}
+      <section className="max-w-3xl mx-auto px-5 sm:px-8 py-10" data-testid="student-refer-section">
+        <ReferralCard />
       </section>
 
       {/* FAQ */}

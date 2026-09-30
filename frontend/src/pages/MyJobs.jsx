@@ -70,10 +70,17 @@ export default function MyJobs() {
     setPayFor({ driverId, price });
   };
 
-  const payAmount = payFor ? (() => {
+  const payBase = payFor ? (() => {
     const eff = payFor.price * (1 - promoPct);
     return payType === "deposit" ? eff * 0.15 : eff;
   })() : 0;
+  const userCredit = user?.referral_credit || 0;
+  const creditApplied = payFor ? (() => {
+    let c = Math.min(userCredit, payBase);
+    if (payBase - c < 0.5) c = Math.max(0, payBase - 0.5);
+    return +c.toFixed(2);
+  })() : 0;
+  const payAmount = +(payBase - creditApplied).toFixed(2);
 
   const handleToken = async (sourceId) => {
     if (!payFor || !active) return;
@@ -209,6 +216,7 @@ export default function MyJobs() {
           open={!!payFor}
           onOpenChange={(o) => { if (!o) { setPayFor(null); setAccepting(null); } }}
           amount={payAmount}
+          creditApplied={creditApplied}
           payType={payType}
           driverName={(offers?.offers || bids)?.find((o) => o.driver_id === payFor.driverId)?.name}
           onToken={handleToken}

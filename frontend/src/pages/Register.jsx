@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { AuthShell } from "@/pages/Login";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ const googleLogin = () => {
 export default function Register() {
   const { register, formatApiError } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const ref = (params.get("ref") || "").toUpperCase();
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,7 +28,7 @@ export default function Register() {
     e.preventDefault();
     setBusy(true); setError("");
     try {
-      await register(form);
+      await register({ ...form, ref: ref || undefined });
       toast.success("Account created!");
       navigate("/jobs", { replace: true });
     } catch (err) {
@@ -37,6 +39,7 @@ export default function Register() {
   return (
     <AuthShell title="Create your account" subtitle="Book and track your move in minutes.">
       <form onSubmit={submit} className="space-y-4" data-testid="register-form">
+        {ref && <div className="text-sm text-primary bg-violet-50 border border-violet-200 rounded-md px-3 py-2 flex items-center gap-2" data-testid="register-ref-banner">🎉 Invited by a friend — you'll both get £5 credit after your first move.</div>}
         {error && <div className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2" data-testid="register-error">{error}</div>}
         <div className="space-y-2">
           <Label htmlFor="name">Full name</Label>
