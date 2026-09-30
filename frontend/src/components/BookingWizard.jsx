@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2,
+  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -19,12 +19,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from "sonner";
 
 const STEPS = ["Addresses", "Floors", "Date & time", "Van", "Photos & items", "Contact"];
-const FLOORS = [{ v: 0, l: "Ground" }, { v: 1, l: "1st floor" }, { v: 2, l: "2nd floor" }, { v: 3, l: "3rd+ floor" }];
+const ACCESS = [{ v: "ground", l: "Ground" }, { v: "stairs", l: "Stairs" }, { v: "lift", l: "Lift" }];
+const STAIR_FLOORS = [{ v: 1, l: "1st floor" }, { v: 2, l: "2nd floor" }, { v: 3, l: "3rd+ floor" }];
 const DRAFT_KEY = "mwv_booking_draft";
 
 const blank = {
   pickup: "", dropoff: "",
-  pickup_floor: "", pickup_lift: null, dropoff_floor: "", dropoff_lift: null,
+  pickup_access: "", dropoff_access: "",
+  pickup_floor: 0, pickup_lift: false, dropoff_floor: 0, dropoff_lift: false,
   date: "", time: "", van_size: "",
   needs_helper: false, heavy_items: false,
   items: "", photos: [], customer_name: "", customer_phone: "", notes: "", promo_code: "",
@@ -52,6 +54,16 @@ export const BookingWizard = ({ compact = true }) => {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const setAccess = (which, v) => {
+    setForm((f) => {
+      const upd = { ...f, [`${which}_access`]: v };
+      if (v === "ground") { upd[`${which}_floor`] = 0; upd[`${which}_lift`] = false; }
+      else if (v === "lift") { upd[`${which}_floor`] = 0; upd[`${which}_lift`] = true; }
+      else if (v === "stairs") { upd[`${which}_floor`] = 0; upd[`${which}_lift`] = false; }
+      return upd;
+    });
+  };
+
   // Pre-fill a promo saved by the student-discount widget (once, if the form has none).
   useEffect(() => {
     const saved = loadPromo();
@@ -70,7 +82,11 @@ export const BookingWizard = ({ compact = true }) => {
 
   const stepValid = useMemo(() => {
     if (step === 0) return form.pickup && form.dropoff;
-    if (step === 1) return form.pickup_floor !== "" && form.dropoff_floor !== "" && form.pickup_lift !== null && form.dropoff_lift !== null;
+    if (step === 1) {
+      const okP = form.pickup_access && (form.pickup_access !== "stairs" || form.pickup_floor >= 1);
+      const okD = form.dropoff_access && (form.dropoff_access !== "stairs" || form.dropoff_floor >= 1);
+      return okP && okD;
+    }
     if (step === 2) return form.date && form.time;
     if (step === 3) return form.van_size;
     if (step === 4) return form.items.trim() && previews.length > 0;
@@ -194,10 +210,10 @@ export const BookingWizard = ({ compact = true }) => {
             )}
 
             {step === 1 && (
-              <Section n={2} title="Floors & access" hint="Stairs take longer — tell us about floors and lifts.">
-                <div className="grid sm:grid-cols-2 gap-5">
-                  <FloorPicker label="Pickup floor" floor={form.pickup_floor} lift={form.pickup_lift} onFloor={(v) => set("pickup_floor", v)} onLift={(v) => set("pickup_lift", v)} testid="pickup" />
-                  <FloorPicker label="Drop-off floor" floor={form.dropoff_floor} lift={form.dropoff_lift} onFloor={(v) => set("dropoff_floor", v)} onLift={(v) => set("dropoff_lift", v)} testid="dropoff" />
+              <Section n={2} title="Floors & access" hint="Tell us how we reach each address.">
+                <div className="space-y-5">
+                  <AccessPicker label="Pickup access" access={form.pickup_access} floor={form.pickup_floor} onAccess={(v) => setAccess("pickup", v)} onFloor={(v) => set("pickup_floor", v)} testid="pickup" />
+                  <AccessPicker label="Drop-off access" access={form.dropoff_access} floor={form.dropoff_floor} onAccess={(v) => setAccess("dropoff", v)} onFloor={(v) => set("dropoff_floor", v)} testid="dropoff" />
                 </div>
               </Section>
             )}
@@ -365,25 +381,24 @@ const Section = ({ n, title, hint, children }) => (
   </div>
 );
 
-const FloorPicker = ({ label, floor, lift, onFloor, onLift, testid }) => (
-  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-    <Label className="flex items-center gap-2 mb-3"><Building2 className="h-4 w-4 text-slate-400" /> {label}</Label>
-    <Select value={floor === "" || floor === null ? undefined : String(floor)} onValueChange={(v) => onFloor(Number(v))}>
-      <SelectTrigger className="bg-white" data-testid={`floor-${testid}`}><SelectValue placeholder="Select floor" /></SelectTrigger>
-      <SelectContent>
-        {FLOORS.map((f) => <SelectItem key={f.v} value={String(f.v)}>{f.l}</SelectItem>)}
-      </SelectContent>
-    </Select>
-    <p className="text-xs text-slate-500 mt-3 mb-1.5">Access</p>
-    <div className="grid grid-cols-2 gap-2">
-      <button type="button" onClick={() => onLift(true)} data-testid={`lift-yes-${testid}`}
-        className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${lift === true ? "border-primary bg-violet-50 text-primary" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>
-        Lift available
-      </button>
-      <button type="button" onClick={() => onLift(false)} data-testid={`lift-no-${testid}`}
-        className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${lift === false ? "border-primary bg-violet-50 text-primary" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>
-        Stairs only
-      </button>
+const AccessPicker = ({ label, access, floor, onAccess, onFloor, testid }) => (
+  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+    <p className="text-sm font-medium text-slate-700 mb-3">{label}</p>
+    <div className="grid grid-cols-3 gap-2">
+      {ACCESS.map((a) => (
+        <button key={a.v} type="button" onClick={() => onAccess(a.v)} data-testid={`access-${a.v}-${testid}`}
+          className={`rounded-xl border-2 px-3 py-3 text-sm font-semibold transition-all ${access === a.v ? "border-primary bg-primary text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-violet-300"}`}>
+          {a.l}
+        </button>
+      ))}
     </div>
+    {access === "stairs" && (
+      <Select value={floor >= 1 ? String(floor) : undefined} onValueChange={(v) => onFloor(Number(v))}>
+        <SelectTrigger className="bg-white mt-3" data-testid={`floor-${testid}`}><SelectValue placeholder="Which floor?" /></SelectTrigger>
+        <SelectContent>
+          {STAIR_FLOORS.map((f) => <SelectItem key={f.v} value={String(f.v)}>{f.l}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    )}
   </div>
 );
