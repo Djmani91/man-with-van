@@ -193,8 +193,6 @@ export const BookingWizard = ({ compact = true }) => {
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-5 sm:p-7 w-full min-w-0" data-testid="booking-wizard">
-      <h2 className="font-heading text-2xl font-bold text-slate-900">Book your man &amp; van</h2>
-      <p className="text-sm text-slate-500 mt-1">Takes about a minute — pay after your move.</p>
 
       {/* Stepper (desktop only) */}
       {!isMobile && (
