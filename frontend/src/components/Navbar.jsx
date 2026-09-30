@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const LINKS = [
-  { label: "Areas", href: "/#areas" },
+  { label: "Areas", href: "/man-and-van" },
   { label: "Services", href: "/#services" },
   { label: "How it works", href: "/#how" },
   { label: "Pricing", href: "/#pricing" },

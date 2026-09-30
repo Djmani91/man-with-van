@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Private/app routes not for indexing
+Disallow: /jobs
+Disallow: /messages
+Disallow: /account
+Disallow: /track/
+Disallow: /admin
+Disallow: /driver
+
+Sitemap: https://move-tracker-dev.preview.emergentagent.com/sitemap.xml

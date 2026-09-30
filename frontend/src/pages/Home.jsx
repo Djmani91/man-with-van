@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowRight, Truck, Clock, ShieldCheck, Star, Zap, PoundSterling, MapPin,
@@ -203,6 +203,9 @@ export default function Home() {
       <section id="areas" className="max-w-7xl mx-auto px-5 sm:px-8 py-16 grid lg:grid-cols-3 gap-8 items-center">
         <div className="lg:col-span-1">
           <SectionHead eyebrow="Coverage" title="Covering any UK postcode" sub="Local moves and long-distance relocations, in these cities and everywhere between." align="left" />
+          <Link to="/man-and-van" className="inline-flex items-center gap-2 mt-5 text-primary font-semibold text-sm hover:underline" data-testid="home-all-areas-link">
+            Browse man &amp; van by London area <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
           {AREAS.map((a) => (

@@ -1,4 +1,5 @@
 import { Truck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export const Footer = () => (
   <footer className="bg-slate-900 text-slate-300 mt-24">
@@ -16,20 +17,21 @@ export const Footer = () => (
         </p>
       </div>
       <div>
-        <h4 className="text-white font-semibold mb-3 text-sm">Services</h4>
+        <h4 className="text-white font-semibold mb-3 text-sm">Popular areas</h4>
         <ul className="space-y-2 text-sm text-slate-400">
-          <li>Home removals</li>
-          <li>Single item delivery</li>
-          <li>Office relocation</li>
-          <li>Student moves</li>
+          <li><Link to="/man-and-van/kilburn" className="hover:text-white transition-colors">Man and van Kilburn</Link></li>
+          <li><Link to="/man-and-van/central-london" className="hover:text-white transition-colors">Man and van Central London</Link></li>
+          <li><Link to="/man-and-van/harrow" className="hover:text-white transition-colors">Man and van Harrow</Link></li>
+          <li><Link to="/man-and-van/camden" className="hover:text-white transition-colors">Man and van Camden</Link></li>
+          <li><Link to="/man-and-van" className="hover:text-white transition-colors font-medium">All London areas →</Link></li>
         </ul>
       </div>
       <div>
         <h4 className="text-white font-semibold mb-3 text-sm">Coverage</h4>
         <ul className="space-y-2 text-sm text-slate-400">
-          <li>London</li>
-          <li>Manchester</li>
-          <li>Birmingham</li>
+          <li><Link to="/man-and-van/wembley" className="hover:text-white transition-colors">Wembley</Link></li>
+          <li><Link to="/man-and-van/hackney" className="hover:text-white transition-colors">Hackney</Link></li>
+          <li><Link to="/man-and-van/stratford" className="hover:text-white transition-colors">Stratford</Link></li>
           <li>Any UK postcode</li>
         </ul>
       </div>
