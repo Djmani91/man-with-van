@@ -115,3 +115,12 @@
 - Added pickup_access/dropoff_access form state; setAccess() maps: ground->floor0/lift false, lift->floor0/lift true, stairs->lift false + chosen floor. Backend ignores the extra access fields and persists floor/lift.
 - Gating: Continue disabled until both addresses have access chosen (+ a floor if Stairs).
 - Verified iteration_17.json (frontend 100%): selectors, conditional floor, gating combos, and persistence (Lift->floor0/lift true, Stairs 3rd+->floor3/lift false) all correct.
+
+## 2026-06 — Driver Hub bottom-nav redesign + quotation cards + customer deposit choice
+- Driver Hub (DriverDashboard.jsx): replaced TOP tabs with a fixed BOTTOM nav (Quotation, Accepted, Message, Settings). 'Waiting' removed from the bar.
+- Quotation tab now has two sub-tabs: 'Quotation' (open jobs) and 'Quotation accepted' (submitted quotes awaiting customer = old Waiting). Added a day filter (All + next 7 days) that filters jobs by date.
+- New Message tab lists all job conversations (accepted jobs); tapping opens the chat.
+- Quotation job cards: big date badge ("FRI 04" weekday+day); removed inline bid input / accept buttons — driver now quotes/accepts ONLY from inside the job detail. Removed 'Suggested from your rates' hint and suggested-price prefill (driver decides their own price; DriverJobDetail quote input starts empty).
+- Customer payment (MyJobs.jsx): deposit choice ('15% deposit' vs 'Pay in full') is NO LONGER pre-selected; every driver Accept button is disabled ('Choose payment first') until the customer picks a payment option.
+- Verified iteration_18.json (nav/sub-tabs/day filter/message/deposit gating, 100%) and iteration_19.json (date badge, no inline controls, quote/accept from detail, 100%).
+- Known: Google Maps embed in driver detail shows key-not-authorized error in preview (needs Maps Embed API enabled + referrer allowance for the domain).

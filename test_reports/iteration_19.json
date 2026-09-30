@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 19 frontend-only verification of Driver Hub Quotation changes: big date badge on cards, removal of inline bid/accept, removal of 'Suggested from your rates' prefill, and quote/accept only from job-detail view. All 4 acceptance criteria PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Driver job detail", "issues": ["Google Maps embed shows API-key-not-authorized error text in the map area on the detail page (pre-existing, not in scope of this iteration but visible)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DriverDashboard.jsx JobCard ignores the `testid` prop passed from the parent (available-*/waiting-*/accepted-*) and only emits data-testid=`job-<id>`. Consider either using the prop or removing it to reduce confusion for future tests.",
+    "Pre-existing: Google Maps JS API key 403 (RefererNotAllowedMapError-style) surfaces user-visible plaintext error inside detail view — should be caught and rendered as a friendly fallback."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "drv1@example.com / Drive#2026 (approved driver) used; open bidding job MWVCE3E1AB7 used for bid flow, FIX_1790800833 for fixed-price accept-visible check.",
+  "seed_data_creation": "None — existing seeded open jobs (9 in Quotation open list) were sufficient.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified: (1) Each open job card renders data-testid job-date-<id> with uppercase weekday + 2-digit day (e.g. 'SUN 01', 'SAT 20'). (2) bid-input-*, accept-*, quote-* testids are ABSENT from the Quotation list (0 found across all 9 cards). (3) 'Suggested from your rates' / 'Suggested' text is absent from both list and detail. (4) Bidding job detail: job-detail-quote-input starts empty, submitting 99 shows 'Bid sent — awaiting customer decision' toast, job moves from Quotation open (9→8) to Quotation accepted (0→1). (5) Fixed-price job detail (FIX_1790800833) exposes job-detail-accept button. Only unrelated console noise: 403 on a resource and Google Maps API key restriction message inside the detail view.",
+  "rca of the issue": "N/A — no bugs found for this iteration's scope."
+}
