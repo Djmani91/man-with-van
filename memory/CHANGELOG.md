@@ -124,3 +124,10 @@
 - Customer payment (MyJobs.jsx): deposit choice ('15% deposit' vs 'Pay in full') is NO LONGER pre-selected; every driver Accept button is disabled ('Choose payment first') until the customer picks a payment option.
 - Verified iteration_18.json (nav/sub-tabs/day filter/message/deposit gating, 100%) and iteration_19.json (date badge, no inline controls, quote/accept from detail, 100%).
 - Known: Google Maps embed in driver detail shows key-not-authorized error in preview (needs Maps Embed API enabled + referrer allowance for the domain).
+
+## 2026-06 — Pre-acceptance customer↔driver chat with contact masking
+- The offer 'Message' button on instant quotes / bidding is now ENABLED — customers can message a driver BEFORE accepting/paying.
+- Chat is per (booking_id, driver_id): customer passes ?driver_id, driver's own id is inferred. Separate thread per offered driver. Backend: _chat_thread + _thread_query (legacy no-driver_id messages still surface in the assigned driver's thread). New GET /api/driver/conversations powers the Driver Hub Message tab (shows pre-acceptance chats too, not just assigned jobs).
+- mask_message() now also redacts UK postcodes → '[address hidden]' (phone/email already → '[contact hidden]'). Contact info is always hidden so parties stay on-platform.
+- Frontend: ChatModal takes driverId prop (appends ?driver_id); MyJobs chat state is {bookingId, driverId}; DriverDashboard Message tab renders /driver/conversations.
+- Verified iteration_20.json: 100% backend + frontend; masking, per-driver threads, driver pre-acceptance conversations, round-trip replies, and legacy assigned-job history all pass.
