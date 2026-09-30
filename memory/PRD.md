@@ -91,3 +91,10 @@ Moving/removals booking platform. Customers get an instant quote, book a local v
 ## Update 2026-06 (fork) — Admin driver email + 4-image driver docs
 - Admin bug fix: /api/admin/drivers now joins email from users; Admin Drivers tab has Email column + search box (name/email/phone/vehicle). Verified iteration_7.
 - Driver registration now collects 4 images: profile_photo, van_photo, licence_photo, insurance_photo (added van_photo). Web /driver/signup requires all 4, uploads after register (cookie auth) → /driver/documents. Admin shows docs X/4. Driver Hub → Settings uploader includes van photo. Verified iteration_8 (100%).
+
+## Update 2026-06 (fork) — Marketplace radius/van-fallback + admin job modal
+- Instant quotes: approved+available drivers within 5mi (top 5); if none, expand to 10mi. Response: {radius_mi, van_fallback, requested_van_name, offers[]}. Each offer has offered_van_size/name, cheapest/closest tags, cap 5.
+- Van fallback: if requested van size has no driver in radius, offer LARGER-van drivers (priced at their van rate) + banner. Drivers now have van_size (small/medium/large/xl); bigger serves smaller; legacy (no van_size) serve any size. Set at driver signup (ds-van-size).
+- Bidding radius 30→20 miles (broadcast + available-jobs listing).
+- Admin: booking rows clickable → AdminJobModal with route map (TrackingMap), full details (pickup/dropoff/floors/customer/driver/price/payment/promo/extras/items/notes) + customer↔driver chat thread (admin reads via GET /bookings/{id}/messages). Inline assign/status dropdowns stopPropagation. Verified iteration_10 (100%).
+- Admin login: email = ADMIN_EMAIL secret (anisha91ahmed@gmail.com); password = ADMIN_PASSWORD secret (seed_admin resets admin password to match env on startup). To reset: update ADMIN_PASSWORD secret + republish.

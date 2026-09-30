@@ -1,0 +1,23 @@
+{
+  "summary": "Verified iteration 10 changes: INSTANT quotes with 5→10 mile radius expansion, van-size fallback, van_size persisted on driver register; BIDDING radius reduced to 20 miles; Admin bookings rows open a job-detail modal with route map + full details + customer↔driver chat thread (admin can read messages). Backend: 7/7 pytest cases pass covering shape/cap/tags, radius expansion, broadcast radius=20, driver van_size storage (valid + invalid), admin manual-assign + chat readability. Frontend: admin modal opens on row click, tracking-map + admin-chat-thread + customer/driver messages render; inline status dropdown does NOT open the modal (stopPropagation works); MyJobs shows offered-van-<id> badge ('Large Luton Van') and toast 'Sent to 5 drivers within 20 miles' on broadcast; bidding tab label 'INCOMING BIDS (WITHIN 20 MI)' present; DriverSignup ds-van-size select lists small/medium/large/xl with correct labels.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_van_and_radius.py",
+    "/app/test_reports/pytest/iter10_van.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "instant_offers: legacy drivers (~35 seeded with no van_size) can serve ANY requested size — this makes van_fallback path very hard to trigger in a real preview because at least one legacy driver will almost always sit inside the 10mi radius. Documented, but if product wants stricter matching consider treating legacy as 'large' or requiring van_size for approved drivers.",
+    "server.py is 1230 lines — split into auth/admin/driver/bookings modules recommended (already flagged in prior iterations).",
+    "instant_offers second radius pass repeats the `pool = [d for d in drivers if d['_dist'] <= radius]` scan; minor duplication, fine for current scale."
+  ],
+  "updated_files": ["/app/backend/tests/test_van_and_radius.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin anisha91ahmed@gmail.com / MoveAdmin#2026 (verified). UI test customer TEST_uic_8d43a7@example.com / Test#2026 + assigned driver TEST_uid_* — used for admin modal chat verification. Pytest creates ephemeral TEST_drv_* + TEST_cust_* per module.",
+  "seed_data_creation": "1 assigned booking MWVA2988C1A with 2 chat messages (Hello driver / On my way) between TEST customer & TEST driver — used to prove admin can read the chat thread inside admin-job-modal. Multiple TEST_ prefixed customers/drivers created by pytest module.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Endpoints validated: GET /api/bookings/{id}/instant-offers → {radius_mi, van_fallback, requested_van_name, offers[]}, each offer has offered_van_size + offered_van_name, sorted ascending by price, capped at 5, cheapest+closest tags. POST /api/bookings/{id}/broadcast returns radius_mi=20. POST /api/auth/driver-register accepts van_size (valid→stored, invalid→null=legacy). POST /api/admin/bookings/{id}/assign is the payment-free path to get an assigned booking with a driver_id so /messages can be posted. Admin GET /bookings/{id}/messages works (admin permitted). Frontend testids verified: admin-row-<id>, admin-job-modal, tracking-map, admin-chat-thread, van-fallback-banner, offered-van-<driver_id>, ds-van-size, status-<id>/assign-<id> (stopPropagation OK).",
+  "rca of the issue": "N/A — all requested behaviour is present and correct in code. Van-fallback path is difficult to trigger end-to-end in the preview because legacy drivers (~35) fill the 'exact' pool; endpoint logic verified by code review + unit-level coverage of shape/tags/cap/radius-expansion."
+}
