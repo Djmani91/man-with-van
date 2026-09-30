@@ -22,6 +22,8 @@ const STEPS = ["Addresses", "Floors", "Date & time", "Van", "Photos & items", "C
 const ACCESS = [{ v: "ground", l: "Ground" }, { v: "stairs", l: "Stairs" }, { v: "lift", l: "Lift" }];
 const STAIR_FLOORS = [{ v: 1, l: "1st floor" }, { v: 2, l: "2nd floor" }, { v: 3, l: "3rd+ floor" }];
 const DRAFT_KEY = "mwv_booking_draft";
+const TIME_SLOTS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+const fmtTime = (t) => { const hr = Number(t.split(":")[0]); const ap = hr >= 12 ? "PM" : "AM"; return `${hr % 12 || 12}:00 ${ap}`; };
 
 const blank = {
   pickup: "", dropoff: "",
@@ -44,6 +46,13 @@ export const BookingWizard = ({ compact = true }) => {
   const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", phone: "" });
   const [authBusy, setAuthBusy] = useState(false);
   const [authErr, setAuthErr] = useState("");
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const h = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", h);
+    return () => mq.removeEventListener("change", h);
+  }, []);
   const [form, setForm] = useState(() => {
     try {
       const saved = sessionStorage.getItem(DRAFT_KEY);
@@ -93,6 +102,13 @@ export const BookingWizard = ({ compact = true }) => {
     if (step === 5) return form.customer_name.trim() && form.customer_phone.trim() && form.notes.trim();
     return true;
   }, [step, form, previews]);
+
+  const allValid = form.pickup && form.dropoff
+    && form.pickup_access && (form.pickup_access !== "stairs" || form.pickup_floor >= 1)
+    && form.dropoff_access && (form.dropoff_access !== "stairs" || form.dropoff_floor >= 1)
+    && form.date && form.time && form.van_size
+    && form.items.trim() && previews.length > 0
+    && form.customer_name.trim() && form.customer_phone.trim() && form.notes.trim();
 
   const onFiles = (e) => {
     const files = Array.from(e.target.files || []);
@@ -178,7 +194,8 @@ export const BookingWizard = ({ compact = true }) => {
       <h2 className="font-heading text-2xl font-bold text-slate-900">Book your man &amp; van</h2>
       <p className="text-sm text-slate-500 mt-1">Takes about a minute — pay after your move.</p>
 
-      {/* Stepper */}
+      {/* Stepper (desktop only) */}
+      {!isMobile && (
       <div className="mt-5" data-testid="wizard-stepper">
         <div className="flex gap-1.5">
           {STEPS.map((label, i) => (
@@ -188,14 +205,14 @@ export const BookingWizard = ({ compact = true }) => {
             </div>
           ))}
         </div>
-        <p className="sm:hidden text-xs font-semibold text-primary mt-2" data-testid="wizard-step-label">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
       </div>
+      )}
 
-      <div className="mt-5 min-h-[240px]">
+      <div className={isMobile ? "mt-5" : "mt-5 min-h-[240px]"}>
         <AnimatePresence mode="wait">
-          <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}>
-            {step === 0 && (
-              <Section n={1} title="Pickup & Drop-off" hint="Type a postcode and pick your full address from the list.">
+          <motion.div key={isMobile ? "all" : step} className={isMobile ? "space-y-4" : ""} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}>
+            {(isMobile || step === 0) && (
+              <Section n={1} hideNum={isMobile} title="Pickup &amp; Drop-off" hint="Type a postcode and pick your full address from the list.">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Pickup address</Label>
@@ -205,12 +222,13 @@ export const BookingWizard = ({ compact = true }) => {
                     <Label>Drop-off address</Label>
                     <AddressAutocomplete value={form.dropoff} onChange={(v) => set("dropoff", v)} placeholder="Search by postcode or street (any UK)…" testid="wizard-dropoff" />
                   </div>
+                  <p className="text-xs text-slate-500 leading-relaxed" data-testid="coverage-note">Pickup must be within 20 miles of London, Oxford, Birmingham, Manchester, Liverpool, or Blackpool. Drop-off can be anywhere in the UK.</p>
                 </div>
               </Section>
             )}
 
-            {step === 1 && (
-              <Section n={2} title="Floors & access" hint="Tell us how we reach each address.">
+            {(isMobile || step === 1) && (
+              <Section n={2} hideNum={isMobile} title="Floors &amp; access" hint="Tell us how we reach each address.">
                 <div className="space-y-5">
                   <AccessPicker label="Pickup access" access={form.pickup_access} floor={form.pickup_floor} onAccess={(v) => setAccess("pickup", v)} onFloor={(v) => set("pickup_floor", v)} testid="pickup" />
                   <AccessPicker label="Drop-off access" access={form.dropoff_access} floor={form.dropoff_floor} onAccess={(v) => setAccess("dropoff", v)} onFloor={(v) => set("dropoff_floor", v)} testid="dropoff" />
@@ -218,29 +236,31 @@ export const BookingWizard = ({ compact = true }) => {
               </Section>
             )}
 
-            {step === 2 && (
-              <Section n={3} title="Date & time" hint="When would you like your move?">
+            {(isMobile || step === 2) && (
+              <Section n={3} hideNum={isMobile} title="When do you need the van?" hint="Choose your date and time slot.">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Date</Label>
                     <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none z-10" />
                       <Input type="date" min={new Date().toISOString().split("T")[0]} value={form.date} onChange={(e) => set("date", e.target.value)} className="pl-9 focus:ring-2 focus:ring-violet-500" data-testid="wizard-date" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Time</Label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                      <Input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="pl-9 focus:ring-2 focus:ring-violet-500" data-testid="wizard-time" />
-                    </div>
+                    <Select value={form.time || ""} onValueChange={(v) => set("time", v)}>
+                      <SelectTrigger className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-time">
+                        <span className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-400" /><SelectValue placeholder="Pick a time" /></span>
+                      </SelectTrigger>
+                      <SelectContent>{TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{fmtTime(t)}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
                 </div>
               </Section>
             )}
 
-            {step === 3 && (
-              <Section n={4} title="Choose your van" hint="Pick the size that fits your move.">
+            {(isMobile || step === 3) && (
+              <Section n={4} hideNum={isMobile} title="Which van do you need?" hint="Pick the size that fits your move.">
                 <div className="grid sm:grid-cols-2 gap-3">
                   {vans.map((v) => (
                     <button key={v.id} type="button" onClick={() => set("van_size", v.id)} data-testid={`wizard-van-${v.id}`}
@@ -251,15 +271,14 @@ export const BookingWizard = ({ compact = true }) => {
                       </div>
                       <p className="font-semibold text-slate-900 mt-2 text-sm">{v.name}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{v.capacity}</p>
-                      <p className="text-xs text-primary font-semibold mt-1">from £{v.hourly}/hr</p>
                     </button>
                   ))}
                 </div>
               </Section>
             )}
 
-            {step === 4 && (
-              <Section n={5} title="Photos & items" hint="Add photos and a list so your driver arrives prepared.">
+            {(isMobile || step === 4) && (
+              <Section n={5} hideNum={isMobile} title="Photos &amp; items" hint="Add photos and a list so your driver arrives prepared.">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>What are we moving? <span className="text-rose-500">*</span></Label>
@@ -301,8 +320,8 @@ export const BookingWizard = ({ compact = true }) => {
               </Section>
             )}
 
-            {step === 5 && (
-              <Section n={6} title="Your details" hint="So your driver can reach you on the day.">
+            {(isMobile || step === 5) && (
+              <Section n={6} hideNum={isMobile} title="Your details" hint="So your driver can reach you on the day.">
                 <div className="space-y-4">
                   <div className="space-y-2"><Label>Full name</Label><Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} placeholder="Jane Smith" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-name" /></div>
                   <div className="space-y-2"><Label>Phone number</Label><Input value={form.customer_phone} onChange={(e) => set("customer_phone", e.target.value)} placeholder="07123 456789" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-phone" /></div>
@@ -323,6 +342,11 @@ export const BookingWizard = ({ compact = true }) => {
         </AnimatePresence>
       </div>
 
+      {isMobile ? (
+        <Button onClick={confirm} disabled={submitting || !allValid} className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 h-12 gap-2" data-testid="mobile-confirm">
+          {submitting ? "Confirming…" : <>Confirm booking <Check className="h-4 w-4" /></>}
+        </Button>
+      ) : (
       <div className="flex justify-between mt-5 pt-4 border-t border-slate-100">
         <Button variant="ghost" onClick={back} disabled={step === 0} className="gap-2" data-testid="wizard-back">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -337,6 +361,7 @@ export const BookingWizard = ({ compact = true }) => {
           </Button>
         )}
       </div>
+      )}
 
       <Dialog open={showAuth} onOpenChange={(o) => { if (!authBusy) setShowAuth(o); }}>
         <DialogContent className="sm:max-w-md" data-testid="booking-auth-modal">
@@ -370,14 +395,14 @@ export const BookingWizard = ({ compact = true }) => {
   );
 };
 
-const Section = ({ n, title, hint, children }) => (
+const Section = ({ n, title, hint, hideNum, children }) => (
   <div>
     <div className="flex items-center gap-3 mb-1">
-      <span className="h-8 w-8 rounded-full bg-violet-100 text-primary font-bold flex items-center justify-center text-sm">{n}</span>
+      {!hideNum && <span className="h-8 w-8 rounded-full bg-violet-100 text-primary font-bold flex items-center justify-center text-sm">{n}</span>}
       <h3 className="font-heading text-xl font-semibold text-slate-900">{title}</h3>
     </div>
-    <p className="text-sm text-slate-500 mb-5 ml-11">{hint}</p>
-    <div className="ml-0 sm:ml-11">{children}</div>
+    <p className={`text-sm text-slate-500 mb-5 ${hideNum ? "" : "ml-11"}`}>{hint}</p>
+    <div className={hideNum ? "" : "ml-0 sm:ml-11"}>{children}</div>
   </div>
 );
 
