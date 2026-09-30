@@ -275,9 +275,10 @@ function DocumentsUploader({ profile, onSaved }) {
   return (
     <div className="pt-4 border-t border-slate-100" data-testid="documents-uploader">
       <p className="font-semibold text-slate-900 text-sm mb-1">Documents</p>
-      <p className="text-xs text-slate-500 mb-3">Upload these to get approved: profile photo, driving licence &amp; insurance.</p>
+      <p className="text-xs text-slate-500 mb-3">Upload these to get approved: profile photo, van photo, driving licence &amp; insurance.</p>
       <div className="grid grid-cols-1 gap-3">
         <DocView label="Profile picture" field="profile_photo" value={profile?.profile_photo} onUpload={upload} uploading={uploading} />
+        <DocView label="Van photo" field="van_photo" value={profile?.van_photo} onUpload={upload} uploading={uploading} />
         <DocView label="Driving licence" field="licence_photo" value={profile?.licence_photo} onUpload={upload} uploading={uploading} />
         <DocView label="Insurance certificate" field="insurance_photo" value={profile?.insurance_photo} onUpload={upload} uploading={uploading} />
       </div>

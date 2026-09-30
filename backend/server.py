@@ -379,6 +379,7 @@ class MessageInput(BaseModel):
 
 class DocumentsInput(BaseModel):
     profile_photo: Optional[str] = None
+    van_photo: Optional[str] = None
     licence_photo: Optional[str] = None
     insurance_photo: Optional[str] = None
 
@@ -424,7 +425,7 @@ async def driver_register(data: DriverRegisterInput, response: Response):
         "insurance_no": data.insurance_no.strip(), "mot_expiry": data.mot_expiry,
         "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
         "address": (data.address or "").strip() or None,
-        "profile_photo": None, "licence_photo": None, "insurance_photo": None,
+        "profile_photo": None, "van_photo": None, "licence_photo": None, "insurance_photo": None,
         "pricing": pricing, "rating": driver_rating(user["user_id"]), "reviews": driver_reviews(user["user_id"]),
         "status": "pending", "availability": "available",
         "created_at": datetime.now(timezone.utc).isoformat(),

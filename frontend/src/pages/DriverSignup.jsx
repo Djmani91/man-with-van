@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Truck, ArrowLeft } from "lucide-react";
+import { Truck, ArrowLeft, Camera, Check } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
@@ -13,9 +13,18 @@ export default function DriverSignup() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", address: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
+  const [files, setFiles] = useState({ profile_photo: null, van_photo: null, licence_photo: null, insurance_photo: null });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setFile = (k) => (e) => setFiles((f) => ({ ...f, [k]: e.target.files?.[0] || null }));
+
+  const uploadOne = async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+    return data.path;
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -24,6 +33,9 @@ export default function DriverSignup() {
     const missing = Object.entries(required).filter(([k]) => !String(form[k] || "").trim()).map(([, label]) => label);
     if (missing.length) { setError(`Please fill: ${missing.join(", ")}`); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     if (String(form.password).length < 6) { setError("Password must be at least 6 characters."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const imgLabels = { profile_photo: "Profile photo", van_photo: "Van photo", licence_photo: "Driving licence photo", insurance_photo: "Insurance photo" };
+    const imgMissing = Object.entries(imgLabels).filter(([k]) => !files[k]).map(([, l]) => l);
+    if (imgMissing.length) { setError(`Please add: ${imgMissing.join(", ")}`); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     const num = (v, min) => { const n = Number(v); return Number.isFinite(n) ? n : min; };
     setBusy(true);
     try {
@@ -38,6 +50,15 @@ export default function DriverSignup() {
       };
       const { data } = await api.post("/auth/driver-register", payload);
       setUser(data);
+      try {
+        const docs = {};
+        for (const k of ["profile_photo", "van_photo", "licence_photo", "insurance_photo"]) {
+          if (files[k]) docs[k] = await uploadOne(files[k]);
+        }
+        if (Object.keys(docs).length) await api.post("/driver/documents", docs);
+      } catch (up) {
+        toast.warning("Account created, but a photo didn't upload — add it in Driver Hub → Settings.");
+      }
       toast.success("Application submitted! Awaiting approval.");
       navigate("/driver", { replace: true });
     } catch (err) {
@@ -87,10 +108,40 @@ export default function DriverSignup() {
             </div>
           </div>
 
+          <div className="pt-2 border-t border-slate-100">
+            <p className="font-semibold text-slate-900 text-sm mb-1">Upload your documents</p>
+            <p className="text-xs text-slate-500 mb-3">Clear photos help us approve you faster. All four are required.</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <FileField label="Profile photo" hint="A clear photo of you" file={files.profile_photo} onChange={setFile("profile_photo")} testid="ds-file-profile" />
+              <FileField label="Van photo" hint="Your vehicle" file={files.van_photo} onChange={setFile("van_photo")} testid="ds-file-van" />
+              <FileField label="Driving licence" hint="Front of your licence" file={files.licence_photo} onChange={setFile("licence_photo")} testid="ds-file-licence" />
+              <FileField label="Insurance" hint="Insurance certificate" file={files.insurance_photo} onChange={setFile("insurance_photo")} testid="ds-file-insurance" />
+            </div>
+          </div>
+
           <Button type="submit" disabled={busy} className="w-full bg-primary hover:bg-[#4C1D95]" data-testid="ds-submit">{busy ? "Submitting…" : "Submit application"}</Button>
           <p className="text-sm text-center text-slate-500">Already registered? <Link to="/driver/login" className="text-primary font-semibold" data-testid="ds-to-login">Driver login</Link></p>
         </form>
       </div>
+    </div>
+  );
+}
+
+function FileField({ label, hint, file, onChange, testid }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <label className="flex items-center gap-3 border border-dashed border-slate-300 rounded-lg px-3 py-2.5 cursor-pointer hover:border-violet-400 transition-colors">
+        {file
+          ? <img src={URL.createObjectURL(file)} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
+          : <div className="h-10 w-10 rounded bg-violet-100 flex items-center justify-center shrink-0"><Camera className="h-5 w-5 text-primary" /></div>}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-slate-700 truncate">{file ? file.name : "Tap to upload"}</p>
+          <p className="text-[11px] text-slate-400 truncate">{hint}</p>
+        </div>
+        {file && <Check className="h-4 w-4 text-emerald-500 shrink-0" />}
+        <input type="file" accept="image/*" className="hidden" onChange={onChange} data-testid={testid} />
+      </label>
     </div>
   );
 }

@@ -136,14 +136,14 @@ export default function Admin() {
                 <TableBody>
                   {filteredDrivers.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">{drivers.length === 0 ? "No drivers yet." : "No drivers match your search."}</TableCell></TableRow>}
                   {filteredDrivers.map((d) => {
-                    const docs = ["profile_photo", "licence_photo", "insurance_photo"].filter((k) => d[k]).length;
+                    const docs = ["profile_photo", "van_photo", "licence_photo", "insurance_photo"].filter((k) => d[k]).length;
                     return (
                     <TableRow key={d.user_id} data-testid={`driver-row-${d.user_id}`}>
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell className="text-sm" data-testid={`driver-email-${d.user_id}`}>{d.email || "—"}</TableCell>
                       <TableCell className="text-sm">{d.phone}</TableCell>
                       <TableCell className="text-sm">{d.vehicle}</TableCell>
-                      <TableCell><Badge className={docs === 3 ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"} data-testid={`docs-${d.user_id}`}>{docs}/3</Badge></TableCell>
+                      <TableCell><Badge className={docs === 4 ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"} data-testid={`docs-${d.user_id}`}>{docs}/4</Badge></TableCell>
                       <TableCell><Badge className={d.status === "approved" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"}>{d.status === "approved" ? "Approved" : "Pending"}</Badge></TableCell>
                       <TableCell><Badge className={d.availability === "available" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-slate-200 text-slate-600 border-0"}>{d.availability === "available" ? "Available" : d.availability === "on_job" ? "On job" : "Off"}</Badge></TableCell>
                       <TableCell className="text-right">
