@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2, Loader2, AlertTriangle,
+  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2, AlertTriangle,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -16,6 +16,7 @@ import { getPromo, loadPromo, savePromo, clearPromo } from "@/lib/promo";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const STEPS = ["Addresses", "Floors", "Date & time", "Van", "Photos & items", "Contact"];
@@ -31,14 +32,18 @@ const blank = {
 };
 
 export const BookingWizard = ({ compact = true }) => {
-  const { user } = useAuth();
+  const { user, login, register } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [vans, setVans] = useState([]);
   const [quote, setQuote] = useState(null);
   const [previews, setPreviews] = useState([]);
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState("register");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", phone: "" });
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authErr, setAuthErr] = useState("");
   const [form, setForm] = useState(() => {
     try {
       const saved = sessionStorage.getItem(DRAFT_KEY);
@@ -87,55 +92,88 @@ export const BookingWizard = ({ compact = true }) => {
     if (step === 0) return form.pickup && form.dropoff;
     if (step === 2) return form.date && form.time;
     if (step === 3) return form.van_size;
-    if (step === 5) return form.customer_name && form.customer_phone;
+    if (step === 4) return form.items.trim() && previews.length > 0;
+    if (step === 5) return form.customer_name.trim() && form.customer_phone.trim() && form.notes.trim();
     return true;
-  }, [step, form]);
+  }, [step, form, previews]);
 
-  const onFiles = async (e) => {
+  const onFiles = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    if (!user) { toast.info("Sign in to add photos — you can still book without them."); return; }
-    setUploading(true);
-    for (const file of files) {
-      const localUrl = URL.createObjectURL(file);
-      try {
-        const fd = new FormData();
-        fd.append("file", file);
-        const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-        setForm((f) => ({ ...f, photos: [...f.photos, data.path] }));
-        setPreviews((p) => [...p, { url: localUrl, path: data.path }]);
-      } catch (err) {
-        toast.error("Photo upload failed");
-        URL.revokeObjectURL(localUrl);
-      }
-    }
-    setUploading(false);
+    setPreviews((p) => [
+      ...p,
+      ...files.map((file) => ({ id: `${Date.now()}-${Math.random()}`, url: URL.createObjectURL(file), file })),
+    ]);
     e.target.value = "";
   };
 
-  const removePhoto = (path) => {
-    setForm((f) => ({ ...f, photos: f.photos.filter((p) => p !== path) }));
-    setPreviews((p) => p.filter((x) => x.path !== path));
+  const removePhoto = (id) => {
+    setPreviews((p) => {
+      const found = p.find((x) => x.id === id);
+      if (found) URL.revokeObjectURL(found.url);
+      return p.filter((x) => x.id !== id);
+    });
   };
 
   const next = () => setStep((s) => Math.min(s + 1, 5));
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
-  const confirm = async () => {
-    if (!user) {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...form, photos: [] }));
-      toast.info("Please sign in to confirm your booking");
-      navigate("/login", { state: { from: "/book" } });
-      return;
+  const uploadPhotos = async () => {
+    const paths = [];
+    for (const p of previews) {
+      const fd = new FormData();
+      fd.append("file", p.file);
+      const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      paths.push(data.path);
     }
+    return paths;
+  };
+
+  const submitBooking = async () => {
     setSubmitting(true);
     try {
-      const { data } = await api.post("/bookings", form);
+      const photos = await uploadPhotos();
+      await api.post("/bookings", { ...form, photos });
       toast.success("Booking created — now choose your driver.");
       navigate(`/jobs`);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Could not create booking");
     } finally { setSubmitting(false); }
+  };
+
+  const confirm = () => {
+    if (!user) {
+      setAuthErr("");
+      setAuthForm((a) => ({ ...a, name: a.name || form.customer_name, phone: a.phone || form.customer_phone }));
+      setShowAuth(true);
+      return;
+    }
+    submitBooking();
+  };
+
+  const doAuth = async () => {
+    setAuthErr("");
+    if (authMode === "register" && (!authForm.name.trim() || !authForm.phone.trim())) {
+      setAuthErr("Please enter your name and phone number."); return;
+    }
+    if (!authForm.email.trim() || !authForm.password) {
+      setAuthErr("Please enter your email and password."); return;
+    }
+    setAuthBusy(true);
+    try {
+      if (authMode === "login") {
+        await login(authForm.email.trim(), authForm.password);
+      } else {
+        await register({
+          name: authForm.name.trim(), email: authForm.email.trim(),
+          password: authForm.password, phone: authForm.phone.trim(),
+        });
+      }
+      setShowAuth(false);
+      await submitBooking();
+    } catch (err) {
+      setAuthErr(formatApiError(err.response?.data?.detail) || "Could not sign in. Please try again.");
+    } finally { setAuthBusy(false); }
   };
 
   return (
@@ -227,7 +265,7 @@ export const BookingWizard = ({ compact = true }) => {
               <Section n={5} title="Photos & items" hint="Add photos and a list so your driver arrives prepared.">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>What are we moving?</Label>
+                    <Label>What are we moving? <span className="text-rose-500">*</span></Label>
                     <Textarea value={form.items} onChange={(e) => set("items", e.target.value)} placeholder="e.g. Double bed, 3-seat sofa, washing machine, 10 boxes" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-items" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -243,18 +281,18 @@ export const BookingWizard = ({ compact = true }) => {
                     </button>
                   </div>
                   <div className="space-y-2">
-                    <Label>Photos <span className="text-slate-400 font-normal">(optional)</span></Label>
+                    <Label>Photos <span className="text-rose-500">*</span> <span className="text-slate-400 font-normal">(at least one)</span></Label>
                     <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl py-6 cursor-pointer hover:border-violet-400 transition-colors text-sm text-slate-500" data-testid="wizard-photo-label">
-                      {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-                      {uploading ? "Uploading…" : "Tap to upload photos"}
+                      <Upload className="h-5 w-5" />
+                      Tap to upload photos
                       <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} data-testid="wizard-photo-input" />
                     </label>
                     {previews.length > 0 && (
                       <div className="grid grid-cols-4 gap-2 mt-2">
                         {previews.map((p) => (
-                          <div key={p.path} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200">
+                          <div key={p.id} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200">
                             <img src={p.url} alt="item" className="w-full h-full object-cover" />
-                            <button type="button" onClick={() => removePhoto(p.path)} className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center" data-testid="wizard-photo-remove">
+                            <button type="button" onClick={() => removePhoto(p.id)} className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center" data-testid="wizard-photo-remove">
                               <X className="h-3 w-3" />
                             </button>
                           </div>
@@ -271,7 +309,7 @@ export const BookingWizard = ({ compact = true }) => {
                 <div className="space-y-4">
                   <div className="space-y-2"><Label>Full name</Label><Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} placeholder="Jane Smith" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-name" /></div>
                   <div className="space-y-2"><Label>Phone number</Label><Input value={form.customer_phone} onChange={(e) => set("customer_phone", e.target.value)} placeholder="07123 456789" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-phone" /></div>
-                  <div className="space-y-2"><Label>Notes <span className="text-slate-400 font-normal">(optional)</span></Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="e.g. Parking is tight; call on arrival" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-notes" /></div>
+                  <div className="space-y-2"><Label>Notes <span className="text-rose-500">*</span></Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="e.g. Parking is tight; call on arrival" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-notes" /></div>
                   <div className="space-y-2">
                     <Label>Promo code <span className="text-slate-400 font-normal">(optional)</span></Label>
                     <Input value={form.promo_code}
@@ -325,11 +363,39 @@ export const BookingWizard = ({ compact = true }) => {
             Continue <ArrowRight className="h-4 w-4" />
           </Button>
         ) : (
-          <Button onClick={confirm} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 gap-2" data-testid="wizard-confirm">
+          <Button onClick={confirm} disabled={submitting || !stepValid} className="bg-emerald-600 hover:bg-emerald-700 gap-2" data-testid="wizard-confirm">
             {submitting ? "Confirming…" : <>Confirm booking <Check className="h-4 w-4" /></>}
           </Button>
         )}
       </div>
+
+      <Dialog open={showAuth} onOpenChange={(o) => { if (!authBusy) setShowAuth(o); }}>
+        <DialogContent className="sm:max-w-md" data-testid="booking-auth-modal">
+          <DialogHeader>
+            <DialogTitle className="font-heading">{authMode === "login" ? "Sign in to confirm" : "Create your account to confirm"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {authMode === "register" && (
+              <>
+                <div className="space-y-1.5"><Label>Full name</Label><Input value={authForm.name} onChange={(e) => setAuthForm((a) => ({ ...a, name: e.target.value }))} placeholder="Jane Smith" data-testid="auth-name" /></div>
+                <div className="space-y-1.5"><Label>Phone number</Label><Input value={authForm.phone} onChange={(e) => setAuthForm((a) => ({ ...a, phone: e.target.value }))} placeholder="07123 456789" data-testid="auth-phone" /></div>
+              </>
+            )}
+            <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={authForm.email} onChange={(e) => setAuthForm((a) => ({ ...a, email: e.target.value }))} placeholder="you@example.com" data-testid="auth-email" /></div>
+            <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={authForm.password} onChange={(e) => setAuthForm((a) => ({ ...a, password: e.target.value }))} placeholder="••••••••" data-testid="auth-password" /></div>
+            {authErr && <p className="text-sm text-rose-600" data-testid="auth-error">{authErr}</p>}
+            <Button onClick={doAuth} disabled={authBusy} className="w-full bg-emerald-600 hover:bg-emerald-700" data-testid="auth-submit">
+              {authBusy ? "Please wait…" : authMode === "login" ? "Sign in & confirm booking" : "Create account & confirm booking"}
+            </Button>
+            <p className="text-center text-sm text-slate-500">
+              {authMode === "login" ? "New here? " : "Already have an account? "}
+              <button type="button" onClick={() => { setAuthErr(""); setAuthMode((m) => (m === "login" ? "register" : "login")); }} className="text-primary font-semibold" data-testid="auth-toggle">
+                {authMode === "login" ? "Create an account" : "Sign in"}
+              </button>
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
