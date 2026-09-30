@@ -26,6 +26,7 @@ const blank = {
   pickup: "", pickup_flat: "", dropoff: "",
   pickup_floor: 0, pickup_lift: true, dropoff_floor: 0, dropoff_lift: true,
   date: "", time: "", van_size: "",
+  needs_helper: false, heavy_items: false,
   items: "", photos: [], customer_name: "", customer_phone: "", notes: "", promo_code: "",
 };
 
@@ -74,13 +75,13 @@ export const BookingWizard = ({ compact = true }) => {
         const { data } = await api.post("/quote", {
           pickup: form.pickup, dropoff: form.dropoff, van_size: form.van_size, date: form.date, time: form.time,
           pickup_floor: form.pickup_floor, dropoff_floor: form.dropoff_floor,
-          pickup_lift: form.pickup_lift, dropoff_lift: form.dropoff_lift,
+          pickup_lift: form.pickup_lift, dropoff_lift: form.dropoff_lift, heavy_items: form.heavy_items,
         });
         setQuote(data);
       } catch { setQuote(null); }
     }, 300);
     return () => clearTimeout(t);
-  }, [form.pickup, form.dropoff, form.van_size, form.date, form.time, form.pickup_floor, form.dropoff_floor, form.pickup_lift, form.dropoff_lift, canQuote]);
+  }, [form.pickup, form.dropoff, form.van_size, form.date, form.time, form.pickup_floor, form.dropoff_floor, form.pickup_lift, form.dropoff_lift, form.heavy_items, canQuote]);
 
   const stepValid = useMemo(() => {
     if (step === 0) return form.pickup && form.dropoff;
@@ -229,6 +230,18 @@ export const BookingWizard = ({ compact = true }) => {
                   <div className="space-y-2">
                     <Label>What are we moving?</Label>
                     <Textarea value={form.items} onChange={(e) => set("items", e.target.value)} placeholder="e.g. Double bed, 3-seat sofa, washing machine, 10 boxes" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-items" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button type="button" onClick={() => set("needs_helper", !form.needs_helper)} data-testid="wizard-helper"
+                      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${form.needs_helper ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
+                      <span><span className="block text-sm font-semibold text-slate-900">Need a helper?</span><span className="block text-xs text-slate-500">Driver + 1 to carry</span></span>
+                      <Check className={`h-5 w-5 ${form.needs_helper ? "text-primary" : "text-transparent"}`} />
+                    </button>
+                    <button type="button" onClick={() => set("heavy_items", !form.heavy_items)} data-testid="wizard-heavy"
+                      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${form.heavy_items ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
+                      <span><span className="block text-sm font-semibold text-slate-900">Heavy / bulky items?</span><span className="block text-xs text-slate-500">e.g. piano, appliances</span></span>
+                      <Check className={`h-5 w-5 ${form.heavy_items ? "text-primary" : "text-transparent"}`} />
+                    </button>
                   </div>
                   <div className="space-y-2">
                     <Label>Photos <span className="text-slate-400 font-normal">(optional)</span></Label>

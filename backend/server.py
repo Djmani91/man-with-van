@@ -139,19 +139,21 @@ def driver_reviews(uid: str) -> int:
     return 18 + int(_hash_float("rev", uid) * 180)
 
 
-def estimated_hours(distance, van_size, pf, df, needs_helper=False) -> float:
+def estimated_hours(distance, van_size, pf, df, needs_helper=False, heavy_items=False) -> float:
     load = VAN_BY_ID.get(van_size, {}).get("load_hours", 1.5)
     h = load + (distance or 0) / 20.0 + 0.25 * ((pf or 0) + (df or 0))
+    if heavy_items:
+        h += 0.5
     return max(2.0, round(h * 2) / 2)
 
 
 def compute_quote(pickup, dropoff, van_size, date, time,
-                  pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True):
+                  pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True, heavy_items=False):
     van = VAN_BY_ID.get(van_size)
     if not van:
         raise HTTPException(status_code=400, detail="Invalid van size")
     distance = pseudo_distance(pickup, dropoff)
-    hours = estimated_hours(distance, van_size, pickup_floor, dropoff_floor)
+    hours = estimated_hours(distance, van_size, pickup_floor, dropoff_floor, heavy_items=heavy_items)
     est = round(van["rate_min"] * hours, 2)
     return {
         "van_size": van_size, "van_name": van["name"], "distance_miles": distance,
@@ -165,7 +167,7 @@ def driver_job_price(profile: dict, booking: dict):
     pricing = profile.get("pricing") or default_pricing()
     rate = pricing["rates"].get(van, VAN_BY_ID[van]["rate_min"])
     hours = estimated_hours(booking["distance_miles"], van, booking.get("pickup_floor", 0),
-                            booking.get("dropoff_floor", 0), booking.get("needs_helper"))
+                            booking.get("dropoff_floor", 0), booking.get("needs_helper"), booking.get("heavy_items"))
     price = rate * hours
     floors = 0
     if booking.get("pickup_floor") and not booking.get("pickup_lift"):
@@ -324,6 +326,7 @@ class QuoteInput(BaseModel):
     dropoff_floor: int = 0
     pickup_lift: bool = True
     dropoff_lift: bool = True
+    heavy_items: bool = False
 
 
 class BookingInput(BaseModel):
@@ -338,6 +341,7 @@ class BookingInput(BaseModel):
     pickup_lift: bool = True
     dropoff_lift: bool = True
     needs_helper: bool = False
+    heavy_items: bool = False
     items: Optional[str] = None
     photos: List[str] = []
     customer_name: str
@@ -527,7 +531,7 @@ async def validate_promo(code: str):
 @api_router.post("/quote")
 async def quote(data: QuoteInput):
     return compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
-                         data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift)
+                         data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items)
 
 
 _STREETS = ["High Street", "Church Road", "Station Road", "Victoria Road", "Green Lane",
@@ -597,7 +601,7 @@ def strip_booking(b: dict) -> dict:
 @api_router.post("/bookings")
 async def create_booking(data: BookingInput, user: dict = Depends(get_current_user)):
     q = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
-                      data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift)
+                      data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items)
     now = datetime.now(timezone.utc).isoformat()
     promo_code = (data.promo_code or "").strip().upper()
     promo = PROMO_CODES.get(promo_code)
@@ -609,6 +613,7 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "pickup_coords": pseudo_coords(data.pickup), "dropoff_coords": pseudo_coords(data.dropoff),
         "pickup_floor": data.pickup_floor, "dropoff_floor": data.dropoff_floor,
         "pickup_lift": data.pickup_lift, "dropoff_lift": data.dropoff_lift, "needs_helper": data.needs_helper,
+        "heavy_items": data.heavy_items,
         "items": data.items, "photos": data.photos,
         "van_size": data.van_size, "van_name": q["van_name"], "distance_miles": q["distance_miles"],
         "estimated_hours": q["estimated_hours"], "date": data.date, "time": data.time, "notes": data.notes,
