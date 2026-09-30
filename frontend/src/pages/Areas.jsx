@@ -4,9 +4,25 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Seo } from "@/components/Seo";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AREAS } from "@/data/areas";
 
 const SITE = process.env.REACT_APP_BACKEND_URL || "";
+
+const FAQS = [
+  { q: "How much does a man and van cost in London?",
+    a: "A man and van in London starts from just £15 per hour for a small van. You get an instant fixed quote based on van size, distance, floors and time — with no hidden fees — so you always know the price before you book." },
+  { q: "Is there a man and van near me in London?",
+    a: "Yes — we have local, vetted drivers in every London borough, from Central London out to Croydon, Harrow and Stratford, so there's usually a man with a van near you ready the same day. Enter your postcode for an instant quote." },
+  { q: "What areas of London do you cover?",
+    a: `We cover every London postcode. Popular areas include ${AREAS.slice(0, 8).map((a) => a.name).join(", ")} and many more — plus long-distance moves from London to anywhere in the UK.` },
+  { q: "Can I get a same-day or cheap man with a van in London?",
+    a: "Yes — same-day and next-day slots are often available across London, and prices start from £15/hour, making it one of the cheapest ways to move. Add a second person if you need help carrying heavier items." },
+  { q: "Do you do house, flat, office and student removals in London?",
+    a: "Yes — from a single item or a studio flat to a full house or office move. We handle home removals, office relocations, marketplace pickups and student moves right across London, with the right van size for each job." },
+  { q: "Are your London drivers insured?",
+    a: "Every driver is vetted and fully insured, with licence, insurance and MOT checked before they can accept jobs, so your belongings are covered — and you can track your move live from pickup to drop-off." },
+];
 
 export default function Areas() {
   const navigate = useNavigate();
@@ -23,6 +39,10 @@ export default function Areas() {
       itemListElement: AREAS.map((a, i) => ({
         "@type": "ListItem", position: i + 1, name: `Man and van in ${a.name}`, url: SITE + `/man-and-van/${a.slug}`,
       })),
+    },
+    {
+      "@context": "https://schema.org", "@type": "FAQPage",
+      mainEntity: FAQS.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
     },
   ];
 
@@ -69,6 +89,18 @@ export default function Areas() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="max-w-3xl mx-auto px-5 sm:px-8 py-12">
+        <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 text-center">Man and van in London — your questions answered</h2>
+        <Accordion type="single" collapsible className="mt-8" data-testid="areas-faq">
+          {FAQS.map((f, i) => (
+            <AccordionItem key={i} value={`faq-${i}`} className="border-b border-slate-200">
+              <AccordionTrigger className="text-left font-heading font-semibold text-slate-900 hover:text-primary" data-testid={`areas-faq-q-${i}`}>{f.q}</AccordionTrigger>
+              <AccordionContent className="text-slate-600 leading-relaxed">{f.a}</AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
       </section>
 
       <section className="max-w-7xl mx-auto px-5 sm:px-8 pb-8 pt-6">

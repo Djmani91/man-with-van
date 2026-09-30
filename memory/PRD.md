@@ -83,3 +83,7 @@ Moving/removals booking platform. Customers get an instant quote, book a local v
 - Frontend: ReferralCard.jsx (code, credit, counts, copy code/link, share) on Account page + Student Discount page ("Refer a flatmate"). Register.jsx reads ?ref= and shows an invite banner + sends ref. SquarePaymentModal shows a "£X referral credit applied" line; MyJobs computes credit-adjusted charge so displayed amount matches server.
 - University SEO section on /student-discount: 16 uni chips ("Man & van near UCL/KCL/Imperial/LSE/QMUL/Westminster/City/SOAS/Manchester/Leeds/Birmingham/Nottingham/Bristol/Edinburgh/Sheffield/Warwick") for "man and van near [uni]" searches.
 - Tested 100% in iteration_6 (10/10 backend + frontend). NOTE: the actual £5 grant on first paid booking is NOT auto-tested because Square is LIVE production (needs a real card). Backend tests at /app/backend/tests/test_referral.py.
+
+## Update 2026-06 (fork) — Expanded Q&A on area pages for AI/SEO
+- Each /man-and-van/:slug area page FAQ expanded from 6 to 12 local, AI-style questions (cost, "man and van near me", same-day, how many people/crew, van size for 1-4 bed, parking/congestion/ULEZ, single item/sofa, house/flat/office/student, nearby areas, how far ahead to book, evenings/weekends, insured + minimum charge). Answers are quotable + keyword-rich, injected with area name/postcodes/borough/landmarks/nearby.
+- Areas index /man-and-van now has a 6-question London man & van FAQ. Both use FAQPage JSON-LD (via Seo jsonLd). Student page already had 12 Q&As. Content-only change, compiles clean.
