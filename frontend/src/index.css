@@ -59,3 +59,13 @@ h1, h2, h3, h4, h5, .font-heading {
 @layer base {
     [data-debug-wrapper="true"] { display: contents !important; }
 }
+
+.apple-pay-button {
+    -webkit-appearance: -apple-pay-button;
+    -apple-pay-button-type: buy;
+    -apple-pay-button-style: black;
+    display: block;
+    min-height: 44px;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}

@@ -4,7 +4,7 @@ import {
   Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Package, Clock,
   ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2,
 } from "lucide-react";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
 import { ChatModal } from "@/components/ChatModal";
@@ -174,6 +174,18 @@ const JobCard = ({ job, children, showContact }) => (
       {job.items && <p className="flex items-start gap-2 text-slate-500"><Package className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {job.items}</p>}
       {showContact && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
     </div>
+    {job.photos?.length > 0 && (
+      <div className="mt-3" data-testid={`job-photos-${job.booking_id}`}>
+        <p className="text-xs text-slate-400 mb-1.5">Customer's photos</p>
+        <div className="flex gap-2 flex-wrap">
+          {job.photos.map((p, i) => (
+            <a key={i} href={`${API}/files/${p}`} target="_blank" rel="noreferrer" data-testid={`job-photo-${job.booking_id}-${i}`}>
+              <img src={`${API}/files/${p}`} alt={`Item ${i + 1}`} className="h-16 w-16 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
     {children}
   </div>
 );

@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Truck, Users, PoundSterling, Activity, CheckCircle2, Plus, LogOut, LayoutDashboard, UserCheck, Clock,
+  Truck, Users, PoundSterling, Activity, CheckCircle2, Plus, LogOut, LayoutDashboard, UserCheck, Clock, Pencil,
 } from "lucide-react";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
 import { TrackingMap } from "@/components/TrackingMap";
@@ -29,6 +29,7 @@ export default function Admin() {
   const [drivers, setDrivers] = useState([]);
   const [driverSearch, setDriverSearch] = useState("");
   const [job, setJob] = useState(null);
+  const [manageDriver, setManageDriver] = useState(null);
 
   const load = useCallback(async () => {
     const [s, b, d] = await Promise.all([api.get("/admin/stats"), api.get("/admin/bookings"), api.get("/admin/drivers")]);
@@ -149,7 +150,10 @@ export default function Admin() {
                       <TableCell><Badge className={d.status === "approved" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"}>{d.status === "approved" ? "Approved" : "Pending"}</Badge></TableCell>
                       <TableCell><Badge className={d.availability === "available" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-slate-200 text-slate-600 border-0"}>{d.availability === "available" ? "Available" : d.availability === "on_job" ? "On job" : "Off"}</Badge></TableCell>
                       <TableCell className="text-right">
-                        {d.status === "pending" && <Button size="sm" onClick={() => approve(d.user_id)} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" data-testid={`approve-${d.user_id}`}><UserCheck className="h-4 w-4" /> Approve</Button>}
+                        <div className="flex items-center justify-end gap-2">
+                          {d.status === "pending" && <Button size="sm" onClick={() => approve(d.user_id)} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" data-testid={`approve-${d.user_id}`}><UserCheck className="h-4 w-4" /> Approve</Button>}
+                          <Button size="sm" variant="outline" onClick={() => setManageDriver(d)} className="gap-1.5" data-testid={`manage-${d.user_id}`}><Pencil className="h-4 w-4" /> Manage</Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );})}
@@ -159,6 +163,7 @@ export default function Admin() {
           </TabsContent>
         </Tabs>
         {job && <AdminJobModal booking={job} onClose={() => setJob(null)} />}
+        {manageDriver && <DriverManageDialog driver={manageDriver} onClose={() => setManageDriver(null)} onSaved={load} />}
       </div>
     </div>
   );
@@ -290,6 +295,131 @@ function AddDriverDialog({ onAdded }) {
           <div className="space-y-2"><Label>Vehicle</Label><Input value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="driver-vehicle" /></div>
         </div>
         <DialogFooter><Button onClick={submit} disabled={busy || !form.name || !form.email || !form.password || !form.phone || !form.vehicle} className="bg-primary hover:bg-[#4C1D95]" data-testid="driver-save">{busy ? "Adding…" : "Add driver"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+const VAN_OPTS = [
+  { id: "small", name: "Small Van" },
+  { id: "medium", name: "Medium Van" },
+  { id: "large", name: "Large Van" },
+  { id: "xl", name: "XL / Luton" },
+];
+const PHOTO_FIELDS = [
+  { key: "profile_photo", label: "Profile" },
+  { key: "van_photo", label: "Van" },
+  { key: "licence_photo", label: "Licence" },
+  { key: "insurance_photo", label: "Insurance" },
+];
+
+function DriverManageDialog({ driver, onClose, onSaved }) {
+  const p = driver.pricing || { rates: {}, stairs_fee: 0, helper_rate: 0 };
+  const [form, setForm] = useState({
+    name: driver.name || "", phone: driver.phone || "", vehicle: driver.vehicle || "",
+    van_size: driver.van_size || "", home_postcode: driver.home_postcode || "",
+    status: driver.status || "pending", availability: driver.availability || "available",
+    rate_small: p.rates?.small ?? "", rate_medium: p.rates?.medium ?? "",
+    rate_large: p.rates?.large ?? "", rate_xl: p.rates?.xl ?? "",
+    stairs_fee: p.stairs_fee ?? "", helper_rate: p.helper_rate ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.put(`/admin/drivers/${driver.user_id}`, {
+        name: form.name, phone: form.phone, vehicle: form.vehicle,
+        van_size: form.van_size || null, home_postcode: form.home_postcode,
+        status: form.status, availability: form.availability,
+        pricing: {
+          rates: {
+            small: Number(form.rate_small) || 0, medium: Number(form.rate_medium) || 0,
+            large: Number(form.rate_large) || 0, xl: Number(form.rate_xl) || 0,
+          },
+          stairs_fee: Number(form.stairs_fee) || 0, helper_rate: Number(form.helper_rate) || 0,
+        },
+      });
+      toast.success("Driver updated");
+      onClose(); onSaved();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={!!driver} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="driver-manage-dialog" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-heading">Manage driver — {driver.name}</DialogTitle>
+          <DialogDescription>{driver.email || "—"}</DialogDescription>
+        </DialogHeader>
+
+        {/* Documents / photos */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Documents & photos</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {PHOTO_FIELDS.map((f) => (
+              <div key={f.key} className="space-y-1">
+                <p className="text-xs text-slate-500">{f.label}</p>
+                {driver[f.key]
+                  ? <a href={`${API}/files/${driver[f.key]}`} target="_blank" rel="noreferrer" data-testid={`driver-photo-${f.key}`}>
+                      <img src={`${API}/files/${driver[f.key]}`} alt={f.label} className="w-full h-24 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
+                    </a>
+                  : <div className="w-full h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400" data-testid={`driver-photo-missing-${f.key}`}>Not uploaded</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Editable fields */}
+        <div className="grid sm:grid-cols-2 gap-3 mt-2">
+          <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={set("name")} data-testid="edit-name" /></div>
+          <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={set("phone")} data-testid="edit-phone" /></div>
+          <div className="space-y-1.5"><Label>Vehicle</Label><Input value={form.vehicle} onChange={set("vehicle")} data-testid="edit-vehicle" /></div>
+          <div className="space-y-1.5"><Label>Home postcode</Label><Input value={form.home_postcode} onChange={set("home_postcode")} data-testid="edit-postcode" /></div>
+          <div className="space-y-1.5"><Label>Van size</Label>
+            <Select value={form.van_size} onValueChange={set("van_size")}>
+              <SelectTrigger data-testid="edit-vansize"><SelectValue placeholder="Any / not set" /></SelectTrigger>
+              <SelectContent>{VAN_OPTS.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5"><Label>Status</Label>
+            <Select value={form.status} onValueChange={set("status")}>
+              <SelectTrigger data-testid="edit-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5"><Label>Availability</Label>
+            <Select value={form.availability} onValueChange={set("availability")}>
+              <SelectTrigger data-testid="edit-availability"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="off">Off</SelectItem>
+                <SelectItem value="on_job">On job</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mt-3">Hourly rates (£)</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1.5"><Label className="text-xs">Small</Label><Input type="number" value={form.rate_small} onChange={set("rate_small")} data-testid="edit-rate-small" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Medium</Label><Input type="number" value={form.rate_medium} onChange={set("rate_medium")} data-testid="edit-rate-medium" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Large</Label><Input type="number" value={form.rate_large} onChange={set("rate_large")} data-testid="edit-rate-large" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">XL/Luton</Label><Input type="number" value={form.rate_xl} onChange={set("rate_xl")} data-testid="edit-rate-xl" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Stairs / floor</Label><Input type="number" value={form.stairs_fee} onChange={set("stairs_fee")} data-testid="edit-stairs" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Helper / hr</Label><Input type="number" value={form.helper_rate} onChange={set("helper_rate")} data-testid="edit-helper" /></div>
+        </div>
+
+        <DialogFooter className="mt-3">
+          <Button onClick={save} disabled={busy} className="bg-primary hover:bg-[#4C1D95]" data-testid="driver-manage-save">{busy ? "Saving…" : "Save changes"}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

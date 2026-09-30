@@ -28,20 +28,48 @@ function loadSquareSdk() {
 export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied = 0, payType, driverName, onToken }) {
   const cardRef = useRef(null);
   const containerRef = useRef(null);
+  const googleRef = useRef(null);
+  const googlePayRef = useRef(null);
+  const applePayRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [hasGoogle, setHasGoogle] = useState(false);
+  const [hasApple, setHasApple] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     let cardInstance = null;
-    setReady(false); setError("");
+    setReady(false); setError(""); setHasGoogle(false); setHasApple(false);
     (async () => {
       try {
         const Square = await loadSquareSdk();
         if (cancelled) return;
         const payments = Square.payments(APP_ID, LOCATION_ID);
+
+        // Digital wallets — each is optional and hidden if the device/browser isn't eligible.
+        try {
+          const req = payments.paymentRequest({
+            countryCode: "GB",
+            currencyCode: "GBP",
+            total: { amount: amount.toFixed(2), label: "Man With Van" },
+          });
+          try {
+            const gp = await payments.googlePay(req);
+            if (!cancelled && googleRef.current) {
+              await gp.attach(googleRef.current);
+              googlePayRef.current = gp;
+              setHasGoogle(true);
+            }
+          } catch (e) { /* Google Pay unavailable */ }
+          try {
+            const ap = await payments.applePay(req);
+            if (!cancelled) { applePayRef.current = ap; setHasApple(true); }
+          } catch (e) { /* Apple Pay unavailable */ }
+        } catch (e) { /* paymentRequest unsupported */ }
+
+        // Card form (always available)
         const card = await payments.card();
         if (cancelled) return;
         await card.attach(containerRef.current);
@@ -55,17 +83,20 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
     return () => {
       cancelled = true;
       try { cardInstance?.destroy?.(); } catch { /* noop */ }
+      try { googlePayRef.current?.destroy?.(); } catch { /* noop */ }
       cardRef.current = null;
+      googlePayRef.current = null;
+      applePayRef.current = null;
     };
-  }, [open]);
+  }, [open, amount]);
 
-  const pay = async () => {
-    if (!cardRef.current || busy) return;
+  const chargeWith = async (instance) => {
+    if (!instance || busy) return;
     setBusy(true); setError("");
     try {
-      const result = await cardRef.current.tokenize();
+      const result = await instance.tokenize();
       if (result.status !== "OK") {
-        throw new Error(result.errors?.[0]?.message || "Please check your card details.");
+        throw new Error(result.errors?.[0]?.message || "Payment could not be completed.");
       }
       await onToken(result.token);
     } catch (e) {
@@ -73,6 +104,10 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
       setBusy(false);
     }
   };
+
+  const pay = () => chargeWith(cardRef.current);
+  const payGoogle = () => chargeWith(googlePayRef.current);
+  const payApple = () => chargeWith(applePayRef.current);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!busy) onOpenChange(o); }}>
@@ -82,7 +117,7 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
             {payType === "deposit" ? "Pay 15% deposit" : "Pay in full"}
           </DialogTitle>
           <DialogDescription className="flex items-center gap-1.5 text-slate-500">
-            <Lock className="h-3.5 w-3.5" /> Secure card payment{driverName ? ` to confirm ${driverName}` : ""}
+            <Lock className="h-3.5 w-3.5" /> Secure payment{driverName ? ` to confirm ${driverName}` : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,9 +135,25 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
 
           {!ready && !error && (
             <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading secure card form…
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading secure payment form…
             </div>
           )}
+
+          {/* Digital wallets */}
+          <div className={ready ? "space-y-2" : "hidden"}>
+            <div ref={googleRef} className={hasGoogle ? "min-h-[44px]" : "hidden"} data-testid="square-google-pay" />
+            {hasApple && (
+              <button type="button" onClick={payApple} disabled={busy}
+                className="apple-pay-button w-full" aria-label="Pay with Apple Pay" data-testid="square-apple-pay" />
+            )}
+            {(hasGoogle || hasApple) && (
+              <div className="flex items-center gap-3 py-1">
+                <span className="h-px flex-1 bg-slate-200" />
+                <span className="text-xs text-slate-400">or pay by card</span>
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+            )}
+          </div>
 
           <div ref={containerRef} id="square-card-container" data-testid="square-card-container"
             className={ready ? "min-h-[52px]" : "hidden"} />
@@ -111,7 +162,7 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
 
           <Button onClick={pay} disabled={!ready || busy} data-testid="square-pay-btn"
             className="w-full bg-primary hover:bg-[#4C1D95] h-11">
-            {busy ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing…</> : `Pay £${amount.toFixed(2)}`}
+            {busy ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing…</> : `Pay £${amount.toFixed(2)} by card`}
           </Button>
 
           <p className="flex items-center gap-1.5 text-xs text-slate-400 justify-center">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Truck, MapPin, Calendar, ArrowRight, Plus, PackageOpen, Bell } from "lucide-react";
+import { Truck, MapPin, Calendar, ArrowRight, Plus, PackageOpen, Bell, LogOut } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/Navbar";
@@ -26,7 +26,7 @@ const STATUS_LABEL = {
 };
 
 export default function Account() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(null);
   const [prefs, setPrefs] = useState(user?.notify_prefs || { booking_confirmation: true, status_update: true });
@@ -61,9 +61,14 @@ export default function Account() {
             <h1 className="font-heading text-3xl font-bold text-slate-900">Hi {user?.name?.split(" ")[0] || "there"} 👋</h1>
             <p className="text-slate-500 mt-1">Your account and booking history.</p>
           </div>
-          <Button onClick={() => navigate("/book")} className="bg-primary hover:bg-[#4C1D95] gap-2" data-testid="account-new-booking">
-            <Plus className="h-4 w-4" /> New booking
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => navigate("/book")} className="bg-primary hover:bg-[#4C1D95] gap-2" data-testid="account-new-booking">
+              <Plus className="h-4 w-4" /> New booking
+            </Button>
+            <Button onClick={async () => { await logout(); navigate("/"); }} variant="outline" className="gap-2 text-slate-600" data-testid="account-logout">
+              <LogOut className="h-4 w-4" /> Log out
+            </Button>
+          </div>
         </div>
 
         <div className="mt-8"><ReferralCard /></div>

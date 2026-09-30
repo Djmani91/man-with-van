@@ -142,11 +142,11 @@ export default function MyJobs() {
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <button onClick={() => setPayType("deposit")} data-testid="pay-deposit" className={`text-left p-3 rounded-xl border-2 transition-all ${payType === "deposit" ? "border-primary bg-violet-50" : "border-slate-200"}`}>
                   <p className="font-semibold text-slate-900 text-sm">15% deposit</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Balance in cash to driver</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Pay the balance on the day</p>
                 </button>
                 <button onClick={() => setPayType("full")} data-testid="pay-full" className={`text-left p-3 rounded-xl border-2 transition-all ${payType === "full" ? "border-primary bg-violet-50" : "border-slate-200"}`}>
                   <p className="font-semibold text-slate-900 text-sm">Pay in full</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Nothing to pay on the day</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Pay the full amount now</p>
                 </button>
               </div>
               <div className="mt-3 rounded-xl bg-emerald-50 border border-emerald-100 p-3 flex gap-2">

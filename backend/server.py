@@ -410,6 +410,17 @@ class NotifyPrefsInput(BaseModel):
     status_update: bool = True
 
 
+class DriverUpdateInput(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    vehicle: Optional[str] = None
+    van_size: Optional[str] = None
+    home_postcode: Optional[str] = None
+    status: Optional[str] = None
+    availability: Optional[str] = None
+    pricing: Optional[PricingInput] = None
+
+
 class AvailabilityInput(BaseModel):
     available: bool
 
@@ -1228,6 +1239,40 @@ async def approve_driver(driver_user_id: str, user: dict = Depends(require_admin
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Driver not found")
     return {"status": "approved"}
+
+
+@api_router.put("/admin/drivers/{driver_user_id}")
+async def admin_update_driver(driver_user_id: str, data: DriverUpdateInput, user: dict = Depends(require_admin)):
+    prof = await db.driver_profiles.find_one({"user_id": driver_user_id}, {"_id": 0})
+    if not prof:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    updates = {}
+    if data.name is not None:
+        updates["name"] = data.name.strip()
+    if data.phone is not None:
+        updates["phone"] = data.phone.strip()
+    if data.vehicle is not None:
+        updates["vehicle"] = data.vehicle.strip()
+    if data.van_size is not None:
+        updates["van_size"] = data.van_size if data.van_size in VAN_ORDER else None
+    if data.home_postcode is not None:
+        updates["home_postcode"] = data.home_postcode.strip()
+        updates["base_coords"] = await resolve_coords(data.home_postcode)
+    if data.status in ("approved", "pending", "suspended"):
+        updates["status"] = data.status
+    if data.availability in ("available", "off", "on_job"):
+        updates["availability"] = data.availability
+    if data.pricing is not None:
+        updates["pricing"] = clamp_pricing(data.pricing.model_dump())
+    if updates:
+        await db.driver_profiles.update_one({"user_id": driver_user_id}, {"$set": updates})
+        user_sync = {k: updates[k] for k in ("name", "phone") if k in updates}
+        if user_sync:
+            await db.users.update_one({"user_id": driver_user_id}, {"$set": user_sync})
+    fresh = await db.driver_profiles.find_one({"user_id": driver_user_id}, {"_id": 0})
+    u = await db.users.find_one({"user_id": driver_user_id}, {"_id": 0, "email": 1})
+    fresh["email"] = (u or {}).get("email")
+    return fresh
 
 
 @api_router.post("/admin/bookings/{booking_id}/assign")
