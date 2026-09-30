@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, Truck, Clock, CheckCircle2, Circle } from "lucide-react";
+import { ArrowLeft, Phone, Truck, Clock, CheckCircle2, Circle, MessageSquare, Lock, Star } from "lucide-react";
 import { api } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
+import { BottomNav } from "@/components/BottomNav";
+import { ChatModal } from "@/components/ChatModal";
 import { TrackingMap } from "@/components/TrackingMap";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +14,7 @@ export default function Track() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const [chat, setChat] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -42,11 +45,11 @@ export default function Track() {
   const live = !["completed", "cancelled"].includes(data.status);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navbar />
-      <div className="max-w-6xl mx-auto px-5 sm:px-8 py-8">
-        <Button variant="ghost" onClick={() => navigate("/account")} className="gap-2 mb-4" data-testid="track-back">
-          <ArrowLeft className="h-4 w-4" /> Back to bookings
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="hidden sm:block"><Navbar /></div>
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 py-6">
+        <Button variant="ghost" onClick={() => navigate("/jobs")} className="gap-2 mb-4" data-testid="track-back">
+          <ArrowLeft className="h-4 w-4" /> Back to My Jobs
         </Button>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -88,9 +91,19 @@ export default function Track() {
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Your driver</h3>
                 <p className="font-heading text-lg font-semibold text-slate-900 mt-2">{data.driver.name}</p>
                 <p className="text-sm text-slate-500">{data.driver.vehicle}</p>
-                <a href={`tel:${data.driver.phone}`} className="mt-3 inline-flex items-center gap-2 text-primary font-medium text-sm" data-testid="track-driver-phone">
-                  <Phone className="h-4 w-4" /> {data.driver.phone}
-                </a>
+                {data.driver.rating != null && <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {data.driver.rating.toFixed(1)}</p>}
+                {data.driver.phone ? (
+                  <a href={`tel:${data.driver.phone}`} className="mt-3 inline-flex items-center gap-2 text-primary font-medium text-sm" data-testid="track-driver-phone"><Phone className="h-4 w-4" /> {data.driver.phone}</a>
+                ) : (
+                  <p className="mt-3 inline-flex items-center gap-2 text-slate-400 text-sm" data-testid="track-phone-locked"><Lock className="h-4 w-4" /> Phone shared after deposit</p>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setChat(true)} className="mt-3 w-full gap-1.5" data-testid="track-message"><MessageSquare className="h-4 w-4" /> Message driver</Button>
+                {data.payment?.status === "paid" && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 text-sm">
+                    <p className="text-slate-500">Paid ({data.payment.type === "deposit" ? "15% deposit" : "in full"}): <span className="font-semibold text-slate-900">£{data.payment.amount.toFixed(2)}</span></p>
+                    {data.payment.balance_due > 0 && <p className="text-slate-500">Cash to driver on day: <span className="font-semibold text-slate-900">£{data.payment.balance_due.toFixed(2)}</span></p>}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 text-sm text-slate-500" data-testid="track-no-driver">
@@ -121,6 +134,8 @@ export default function Track() {
           </div>
         </div>
       </div>
+      {data.driver && <ChatModal bookingId={id} open={chat} onOpenChange={setChat} meRole="customer" />}
+      <BottomNav />
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export default function DriverSignup() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -21,7 +21,16 @@ export default function DriverSignup() {
     e.preventDefault();
     setBusy(true); setError("");
     try {
-      const { data } = await api.post("/auth/driver-register", form);
+      const payload = {
+        name: form.name, email: form.email, phone: form.phone, password: form.password,
+        vehicle: form.vehicle, licence_no: form.licence_no, insurance_no: form.insurance_no,
+        mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode,
+        pricing: {
+          rates: { small: Number(form.rate_small), medium: Number(form.rate_medium), large: Number(form.rate_large), xl: Number(form.rate_xl) },
+          stairs_fee: Number(form.stairs_fee), helper_rate: Number(form.helper_rate),
+        },
+      };
+      const { data } = await api.post("/auth/driver-register", payload);
       setUser(data);
       toast.success("Application submitted! Awaiting approval.");
       navigate("/driver", { replace: true });
@@ -50,15 +59,39 @@ export default function DriverSignup() {
           <div className="space-y-2"><Label>Email</Label><Input type="email" required value={form.email} onChange={set("email")} data-testid="ds-email" /></div>
           <div className="space-y-2"><Label>Password</Label><Input type="password" required minLength={6} value={form.password} onChange={set("password")} data-testid="ds-password" /></div>
           <div className="space-y-2"><Label>Vehicle</Label><Input required value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="ds-vehicle" /></div>
+          <div className="space-y-2"><Label>Home base postcode</Label><Input required value={form.home_postcode} onChange={set("home_postcode")} placeholder="e.g. M1 1AA — used to find jobs near you" data-testid="ds-home" /></div>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Licence number</Label><Input required value={form.licence_no} onChange={set("licence_no")} data-testid="ds-licence" /></div>
             <div className="space-y-2"><Label>Insurance policy no.</Label><Input required value={form.insurance_no} onChange={set("insurance_no")} data-testid="ds-insurance" /></div>
           </div>
           <div className="space-y-2"><Label>MOT expiry <span className="text-slate-400 font-normal">(optional)</span></Label><Input type="date" value={form.mot_expiry} onChange={set("mot_expiry")} data-testid="ds-mot" /></div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <p className="font-semibold text-slate-900 text-sm mb-1">Your hourly rates</p>
+            <p className="text-xs text-slate-500 mb-3">Set your rate within each band — you only receive jobs you can price.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <RateField label="Small (£35–45)" min={35} max={45} value={form.rate_small} onChange={set("rate_small")} testid="ds-rate-small" />
+              <RateField label="Medium (£40–50)" min={40} max={50} value={form.rate_medium} onChange={set("rate_medium")} testid="ds-rate-medium" />
+              <RateField label="Large (£45–55)" min={45} max={55} value={form.rate_large} onChange={set("rate_large")} testid="ds-rate-large" />
+              <RateField label="Luton XL (£50–60)" min={50} max={60} value={form.rate_xl} onChange={set("rate_xl")} testid="ds-rate-xl" />
+              <RateField label="Stairs / floor (£5–15)" min={5} max={15} value={form.stairs_fee} onChange={set("stairs_fee")} testid="ds-stairs" />
+              <RateField label="Helper /hr (£15–25)" min={15} max={25} value={form.helper_rate} onChange={set("helper_rate")} testid="ds-helper" />
+            </div>
+          </div>
+
           <Button type="submit" disabled={busy} className="w-full bg-primary hover:bg-[#4C1D95]" data-testid="ds-submit">{busy ? "Submitting…" : "Submit application"}</Button>
           <p className="text-sm text-center text-slate-500">Already registered? <Link to="/driver/login" className="text-primary font-semibold" data-testid="ds-to-login">Driver login</Link></p>
         </form>
       </div>
+    </div>
+  );
+}
+
+function RateField({ label, min, max, value, onChange, testid }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Input type="number" min={min} max={max} value={value} onChange={onChange} data-testid={testid} />
     </div>
   );
 }

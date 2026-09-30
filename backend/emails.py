@@ -168,3 +168,20 @@ async def send_status_update(booking: dict):
     return await send_email(to=booking["customer_email"],
                             subject=f'Move update — {booking["booking_id"]}',
                             html=_shell(inner))
+
+
+async def send_driver_job_alert(to_email: str, driver_name: str, booking: dict):
+    inner = (
+        f'<p style="font-size:16px;color:#0f172a">Hi {escape(driver_name)},</p>'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">A new job is available in your area:</p>'
+        '<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">'
+        + _row("Van", booking.get("van_name", ""))
+        + _row("Pickup", booking.get("pickup", ""))
+        + _row("Drop-off", booking.get("dropoff", ""))
+        + _row("Date & time", f'{booking.get("date","")} at {booking.get("time","")}')
+        + _row("Distance", f'{booking.get("distance_miles","")} miles')
+        + '</table>'
+        f'<p style="font-size:15px;color:#475569;line-height:1.6">Open your Driver Hub to place a quote '
+        f'before someone else does.</p>'
+    )
+    return await send_email(to=to_email, subject="New job in your area — Man With Van", html=_shell(inner))

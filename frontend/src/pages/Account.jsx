@@ -4,6 +4,7 @@ import { Truck, MapPin, Calendar, ArrowRight, Plus, PackageOpen } from "lucide-r
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/Navbar";
+import { BottomNav } from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,13 +30,13 @@ export default function Account() {
   useEffect(() => { api.get("/bookings").then(({ data }) => setBookings(data)).catch(() => setBookings([])); }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navbar />
-      <div className="max-w-5xl mx-auto px-5 sm:px-8 py-10">
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="hidden sm:block"><Navbar /></div>
+      <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="font-heading text-3xl font-bold text-slate-900">Hi {user?.name?.split(" ")[0] || "there"} 👋</h1>
-            <p className="text-slate-500 mt-1">Your moves and booking history.</p>
+            <p className="text-slate-500 mt-1">Your account and booking history.</p>
           </div>
           <Button onClick={() => navigate("/book")} className="bg-primary hover:bg-[#4C1D95] gap-2" data-testid="account-new-booking">
             <Plus className="h-4 w-4" /> New booking
@@ -68,7 +69,7 @@ export default function Account() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-heading text-xl font-bold text-slate-900">£{b.price.toFixed(2)}</p>
+                  <p className="font-heading text-xl font-bold text-slate-900">{b.price ? `£${b.price.toFixed(2)}` : "—"}</p>
                   <Button variant="outline" size="sm" onClick={() => navigate(`/track/${b.booking_id}`)} className="mt-2 gap-1.5" data-testid={`track-${b.booking_id}`}>
                     Track <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
@@ -78,6 +79,7 @@ export default function Account() {
           ))}
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 }

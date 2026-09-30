@@ -118,8 +118,8 @@ export const BookingWizard = ({ compact = true }) => {
     setSubmitting(true);
     try {
       const { data } = await api.post("/bookings", form);
-      toast.success("Booking confirmed! Confirmation email sent.");
-      navigate(`/track/${data.booking_id}`);
+      toast.success("Booking created — now choose your driver.");
+      navigate(`/jobs`);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Could not create booking");
     } finally { setSubmitting(false); }

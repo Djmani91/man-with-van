@@ -28,7 +28,7 @@ export default function Register() {
     try {
       await register(form);
       toast.success("Account created!");
-      navigate("/account", { replace: true });
+      navigate("/jobs", { replace: true });
     } catch (err) {
       setError(formatApiError(err.response?.data?.detail) || err.message);
     } finally { setBusy(false); }

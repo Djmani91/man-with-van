@@ -8,6 +8,8 @@ import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Book from "@/pages/Book";
+import MyJobs from "@/pages/MyJobs";
+import Messages from "@/pages/Messages";
 import Account from "@/pages/Account";
 import Track from "@/pages/Track";
 import Admin from "@/pages/Admin";
@@ -24,6 +26,8 @@ function Shell() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/book" element={<Book />} />
+      <Route path="/jobs" element={<ProtectedRoute><MyJobs /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
       <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
       <Route path="/track/:id" element={<ProtectedRoute><Track /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />

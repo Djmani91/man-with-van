@@ -28,7 +28,7 @@ export default function Login() {
     try {
       const u = await login(email, password);
       toast.success("Welcome back!");
-      const dest = u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : (location.state?.from || "/account");
+      const dest = u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : (location.state?.from || "/jobs");
       navigate(dest, { replace: true });
     } catch (err) {
       setError(formatApiError(err.response?.data?.detail) || err.message);

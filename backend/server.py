@@ -5,13 +5,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 import os
+import re
 import uuid
 import secrets
 import hashlib
 import asyncio
 import logging
+from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import bcrypt
 import httpx
@@ -23,7 +25,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-from emails import send_booking_confirmation, send_status_update
+from emails import send_booking_confirmation, send_status_update, send_driver_job_alert
 import storage
 
 mongo_url = os.environ['MONGO_URL']
@@ -38,26 +40,59 @@ api_router = APIRouter(prefix="/api")
 
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+INSTANT_RADIUS_MI = 5
+BIDDING_RADIUS_MI = 30
+DEPOSIT_PCT = 0.15
 
 # ---------------------------------------------------------------------------
-# Van pricing + quote engine
+# Van pricing + thresholds
 # ---------------------------------------------------------------------------
 VAN_SIZES = [
-    {"id": "small", "name": "Small Van", "desc": "Perfect for a few boxes, a single item or a studio flat. One driver helps you load.", "capacity": "Up to ~15 boxes", "dimensions": "1.2m³ load space", "crew": 1, "hourly": 15, "base": 45.0, "per_mile": 1.6},
-    {"id": "medium", "name": "Medium Van (SWB)", "desc": "Ideal for a 1-bed flat move — sofas, a bed, appliances and boxes.", "capacity": "1-bed flat", "dimensions": "6-7m³ load space", "crew": 1, "hourly": 25, "base": 65.0, "per_mile": 2.1},
-    {"id": "large", "name": "Large Luton Van", "desc": "Our most popular — a full 2-3 bed house move with a tail-lift and two people.", "capacity": "2-3 bed house", "dimensions": "18-20m³ + tail lift", "crew": 2, "hourly": 40, "base": 95.0, "per_mile": 2.9},
-    {"id": "xl", "name": "XL / Multi-Trip", "desc": "For 4+ bed homes or office relocations. Multiple trips or extra crew available.", "capacity": "4+ bed / office", "dimensions": "20m³+ / multiple", "crew": 2, "hourly": 55, "base": 140.0, "per_mile": 3.6},
+    {"id": "small", "name": "Small Van", "desc": "A few boxes, a single item or a studio flat.", "capacity": "Up to ~15 boxes", "dimensions": "1.2m³ load space", "crew": 1, "load_hours": 1.0, "rate_min": 35, "rate_max": 45},
+    {"id": "medium", "name": "Medium Van (SWB)", "desc": "1-bed flat — sofas, a bed, appliances and boxes.", "capacity": "1-bed flat", "dimensions": "6-7m³ load space", "crew": 1, "load_hours": 1.5, "rate_min": 40, "rate_max": 50},
+    {"id": "large", "name": "Large Luton Van", "desc": "Full 2-3 bed house move with a tail-lift.", "capacity": "2-3 bed house", "dimensions": "18-20m³ + tail lift", "crew": 2, "load_hours": 2.0, "rate_min": 45, "rate_max": 55},
+    {"id": "xl", "name": "XL Luton / Multi-Trip", "desc": "4+ bed homes or office relocations.", "capacity": "4+ bed / office", "dimensions": "20m³+ / multiple", "crew": 2, "load_hours": 3.0, "rate_min": 50, "rate_max": 60},
 ]
 VAN_BY_ID = {v["id"]: v for v in VAN_SIZES}
+STAIRS_MIN, STAIRS_MAX = 5, 15
+HELPER_MIN, HELPER_MAX = 15, 25
+
+PRICING_BOUNDS = {
+    "rates": {v["id"]: (v["rate_min"], v["rate_max"]) for v in VAN_SIZES},
+    "stairs_fee": (STAIRS_MIN, STAIRS_MAX),
+    "helper_rate": (HELPER_MIN, HELPER_MAX),
+}
+
+
+def default_pricing():
+    return {
+        "rates": {v["id"]: v["rate_min"] for v in VAN_SIZES},
+        "stairs_fee": STAIRS_MIN,
+        "helper_rate": HELPER_MIN,
+    }
+
+
+def clamp_pricing(p: dict) -> dict:
+    out = default_pricing()
+    rates = p.get("rates", {}) or {}
+    for vid, (lo, hi) in PRICING_BOUNDS["rates"].items():
+        val = rates.get(vid, lo)
+        out["rates"][vid] = max(lo, min(hi, float(val)))
+    lo, hi = PRICING_BOUNDS["stairs_fee"]
+    out["stairs_fee"] = max(lo, min(hi, float(p.get("stairs_fee", lo))))
+    lo, hi = PRICING_BOUNDS["helper_rate"]
+    out["helper_rate"] = max(lo, min(hi, float(p.get("helper_rate", lo))))
+    return out
+
 
 STATUS_LABELS = {
-    "pending": "Awaiting confirmation", "confirmed": "Booking confirmed",
+    "quoting": "Choosing a driver", "pending": "Awaiting confirmation", "confirmed": "Booking confirmed",
     "assigned": "Driver assigned", "en_route_pickup": "Driver en route to pickup",
     "loading": "Loading at pickup", "in_transit": "In transit to destination",
     "completed": "Move completed", "cancelled": "Cancelled",
 }
 STATUS_PROGRESS = {
-    "pending": 0.0, "confirmed": 0.0, "assigned": 0.05, "en_route_pickup": 0.15,
+    "quoting": 0.0, "pending": 0.0, "confirmed": 0.0, "assigned": 0.05, "en_route_pickup": 0.15,
     "loading": 0.25, "in_transit": 0.65, "completed": 1.0, "cancelled": 0.0,
 }
 
@@ -79,45 +114,56 @@ def pseudo_distance(pickup: str, dropoff: str) -> float:
     return round(3.0 + _hash_float(pickup, dropoff) * 55.0, 1)
 
 
+def driver_distance_mi(base_postcode: str, pickup: str) -> float:
+    """Deterministic simulated distance (0.5–34 mi) from a driver's home base to a pickup."""
+    return round(0.5 + _hash_float("dist", base_postcode or "", pickup) * 33.5, 1)
+
+
+def driver_rating(uid: str) -> float:
+    return round(4.3 + _hash_float("rating", uid) * 0.7, 1)
+
+
+def driver_reviews(uid: str) -> int:
+    return 18 + int(_hash_float("rev", uid) * 180)
+
+
+def estimated_hours(distance, van_size, pf, df, needs_helper=False) -> float:
+    load = VAN_BY_ID.get(van_size, {}).get("load_hours", 1.5)
+    h = load + (distance or 0) / 20.0 + 0.25 * ((pf or 0) + (df or 0))
+    return max(2.0, round(h * 2) / 2)
+
+
 def compute_quote(pickup, dropoff, van_size, date, time,
                   pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True):
     van = VAN_BY_ID.get(van_size)
     if not van:
         raise HTTPException(status_code=400, detail="Invalid van size")
     distance = pseudo_distance(pickup, dropoff)
-    base = van["base"]
-    mileage = round(distance * van["per_mile"], 2)
-    subtotal = base + mileage
-    surcharges = []
-
-    floor_charge = 0
-    for floor, lift in [(int(pickup_floor or 0), pickup_lift), (int(dropoff_floor or 0), dropoff_lift)]:
-        if floor > 0 and not lift:
-            floor_charge += 6 * floor
-    if floor_charge:
-        surcharges.append({"label": "Stairs / floor access", "amount": round(float(floor_charge), 2)})
-
-    weekend = False
-    try:
-        if datetime.fromisoformat(date).weekday() >= 5:
-            weekend = True
-    except Exception:
-        pass
-    if weekend:
-        surcharges.append({"label": "Weekend surcharge (10%)", "amount": round(subtotal * 0.10, 2)})
-    try:
-        hour = int(time.split(":")[0])
-        if 7 <= hour <= 9 or 16 <= hour <= 18:
-            surcharges.append({"label": "Peak-time surcharge (8%)", "amount": round(subtotal * 0.08, 2)})
-    except Exception:
-        pass
-
-    total = round(subtotal + sum(s["amount"] for s in surcharges), 2)
+    hours = estimated_hours(distance, van_size, pickup_floor, dropoff_floor)
+    est = round(van["rate_min"] * hours, 2)
     return {
         "van_size": van_size, "van_name": van["name"], "distance_miles": distance,
-        "base_price": base, "mileage_price": mileage, "surcharges": surcharges,
-        "subtotal": round(subtotal, 2), "total": total, "currency": "GBP",
+        "estimated_hours": hours, "rate_from": van["rate_min"],
+        "estimate_from": est, "total": est, "currency": "GBP",
     }
+
+
+def driver_job_price(profile: dict, booking: dict):
+    van = booking["van_size"]
+    pricing = profile.get("pricing") or default_pricing()
+    rate = pricing["rates"].get(van, VAN_BY_ID[van]["rate_min"])
+    hours = estimated_hours(booking["distance_miles"], van, booking.get("pickup_floor", 0),
+                            booking.get("dropoff_floor", 0), booking.get("needs_helper"))
+    price = rate * hours
+    floors = 0
+    if booking.get("pickup_floor") and not booking.get("pickup_lift"):
+        floors += booking["pickup_floor"]
+    if booking.get("dropoff_floor") and not booking.get("dropoff_lift"):
+        floors += booking["dropoff_floor"]
+    price += pricing["stairs_fee"] * floors
+    if booking.get("needs_helper"):
+        price += pricing["helper_rate"] * hours
+    return round(price, 2), hours
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +237,13 @@ async def require_driver(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+async def _require_approved_driver(user: dict) -> dict:
+    p = await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not p or p.get("status") != "approved":
+        raise HTTPException(status_code=403, detail="Your driver account is awaiting approval")
+    return p
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -199,6 +252,12 @@ class RegisterInput(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     phone: Optional[str] = None
+
+
+class PricingInput(BaseModel):
+    rates: Dict[str, float] = {}
+    stairs_fee: float = STAIRS_MIN
+    helper_rate: float = HELPER_MIN
 
 
 class DriverRegisterInput(BaseModel):
@@ -210,6 +269,8 @@ class DriverRegisterInput(BaseModel):
     licence_no: str
     insurance_no: str
     mot_expiry: Optional[str] = None
+    home_postcode: str
+    pricing: Optional[PricingInput] = None
 
 
 class LoginInput(BaseModel):
@@ -240,6 +301,7 @@ class BookingInput(BaseModel):
     dropoff_floor: int = 0
     pickup_lift: bool = True
     dropoff_lift: bool = True
+    needs_helper: bool = False
     items: Optional[str] = None
     photos: List[str] = []
     customer_name: str
@@ -253,10 +315,7 @@ class DriverInput(BaseModel):
     password: str = Field(min_length=6)
     phone: str
     vehicle: str
-
-
-class AssignInput(BaseModel):
-    driver_id: str
+    home_postcode: str = "M1 1AA"
 
 
 class StatusInput(BaseModel):
@@ -265,6 +324,19 @@ class StatusInput(BaseModel):
 
 class AvailabilityInput(BaseModel):
     available: bool
+
+
+class SelectDriverInput(BaseModel):
+    driver_id: str
+    payment_type: str  # "deposit" | "full"
+
+
+class BidInput(BaseModel):
+    price: float
+
+
+class MessageInput(BaseModel):
+    text: str
 
 
 # ---------------------------------------------------------------------------
@@ -292,10 +364,13 @@ async def driver_register(data: DriverRegisterInput, response: Response):
             "phone": data.phone, "role": "driver", "password_hash": hash_password(data.password),
             "picture": None, "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(user)
+    pricing = clamp_pricing(data.pricing.model_dump() if data.pricing else default_pricing())
     await db.driver_profiles.insert_one({
         "user_id": user["user_id"], "name": data.name.strip(), "phone": data.phone,
         "vehicle": data.vehicle.strip(), "licence_no": data.licence_no.strip(),
         "insurance_no": data.insurance_no.strip(), "mot_expiry": data.mot_expiry,
+        "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
+        "pricing": pricing, "rating": driver_rating(user["user_id"]), "reviews": driver_reviews(user["user_id"]),
         "status": "pending", "availability": "available",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -351,11 +426,18 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
-# Quote / address routes
+# Quote / address / pricing meta
 # ---------------------------------------------------------------------------
 @api_router.get("/vansizes")
 async def van_sizes():
     return VAN_SIZES
+
+
+@api_router.get("/pricing-bounds")
+async def pricing_bounds():
+    return {"rates": {v["id"]: {"min": v["rate_min"], "max": v["rate_max"], "name": v["name"]} for v in VAN_SIZES},
+            "stairs_fee": {"min": STAIRS_MIN, "max": STAIRS_MAX},
+            "helper_rate": {"min": HELPER_MIN, "max": HELPER_MAX}}
 
 
 @api_router.post("/quote")
@@ -407,15 +489,10 @@ async def upload(file: UploadFile = File(...), user: dict = Depends(get_current_
 
 @api_router.get("/files/{path:path}")
 async def download(path: str, authorization: str = Header(None), auth: str = Query(None)):
-    token = None
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-    elif auth:
-        token = auth
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else auth
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    session = await db.sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
+    if not await db.sessions.find_one({"session_token": token}):
         raise HTTPException(status_code=401, detail="Invalid session")
     record = await db.files.find_one({"storage_path": path, "is_deleted": False})
     if not record:
@@ -425,8 +502,14 @@ async def download(path: str, authorization: str = Header(None), auth: str = Que
 
 
 # ---------------------------------------------------------------------------
-# Booking routes
+# Bookings
 # ---------------------------------------------------------------------------
+def strip_booking(b: dict) -> dict:
+    b = dict(b)
+    b.pop("_id", None)
+    return b
+
+
 @api_router.post("/bookings")
 async def create_booking(data: BookingInput, user: dict = Depends(get_current_user)):
     q = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
@@ -439,27 +522,37 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "pickup": data.pickup.strip(), "pickup_flat": data.pickup_flat, "dropoff": data.dropoff.strip(),
         "pickup_coords": pseudo_coords(data.pickup), "dropoff_coords": pseudo_coords(data.dropoff),
         "pickup_floor": data.pickup_floor, "dropoff_floor": data.dropoff_floor,
-        "pickup_lift": data.pickup_lift, "dropoff_lift": data.dropoff_lift,
+        "pickup_lift": data.pickup_lift, "dropoff_lift": data.dropoff_lift, "needs_helper": data.needs_helper,
         "items": data.items, "photos": data.photos,
         "van_size": data.van_size, "van_name": q["van_name"], "distance_miles": q["distance_miles"],
-        "date": data.date, "time": data.time, "notes": data.notes,
-        "quote": q, "price": q["total"], "currency": "GBP", "status": "confirmed",
+        "estimated_hours": q["estimated_hours"], "date": data.date, "time": data.time, "notes": data.notes,
+        "quote": q, "price": None, "currency": "GBP",
+        "mode": None, "status": "quoting",
         "driver_id": None, "driver": None,
-        "timeline": [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now}],
-        "created_at": now,
+        "payment": {"status": "unpaid", "type": None, "amount": 0.0, "deposit": 0.0},
+        "timeline": [], "created_at": now,
     }
     await db.bookings.insert_one(booking)
-    try:
-        await send_booking_confirmation(booking)
-    except Exception as e:
-        logger.error(f"Confirmation email failed: {e}")
-    booking.pop("_id", None)
-    return booking
+    return strip_booking(booking)
 
 
 @api_router.get("/bookings")
 async def my_bookings(user: dict = Depends(get_current_user)):
-    return await db.bookings.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    docs = await db.bookings.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [mask_contact_for_customer(b) for b in docs]
+
+
+def paid(b: dict) -> bool:
+    return (b.get("payment") or {}).get("status") == "paid"
+
+
+def mask_contact_for_customer(b: dict) -> dict:
+    b = dict(b)
+    if not paid(b) and b.get("driver"):
+        d = dict(b["driver"])
+        d["phone"] = None
+        b["driver"] = d
+    return b
 
 
 @api_router.get("/bookings/{booking_id}")
@@ -469,7 +562,146 @@ async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Booking not found")
     if b["user_id"] != user["user_id"] and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
-    return b
+    return mask_contact_for_customer(b)
+
+
+async def _offer_for(profile: dict, booking: dict) -> dict:
+    price, hours = driver_job_price(profile, booking)
+    dist = driver_distance_mi(profile.get("home_postcode", ""), booking["pickup"])
+    return {
+        "driver_id": profile["user_id"], "name": profile["name"], "vehicle": profile["vehicle"],
+        "rating": profile.get("rating", 5.0), "reviews": profile.get("reviews", 0),
+        "price": price, "hours": hours, "distance_mi": dist,
+    }
+
+
+def _tag_offers(offers: List[dict]) -> List[dict]:
+    if not offers:
+        return offers
+    cheapest = min(o["price"] for o in offers)
+    closest = min(o["distance_mi"] for o in offers)
+    for o in offers:
+        tags = []
+        if o["price"] == cheapest:
+            tags.append("cheapest")
+        if o["distance_mi"] == closest:
+            tags.append("closest")
+        o["tags"] = tags
+    return offers
+
+
+@api_router.get("/bookings/{booking_id}/instant-offers")
+async def instant_offers(booking_id: str, user: dict = Depends(get_current_user)):
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    drivers = await db.driver_profiles.find({"status": "approved", "availability": "available"}, {"_id": 0}).to_list(500)
+    offers = [await _offer_for(d, b) for d in drivers]
+    within = [o for o in offers if o["distance_mi"] <= INSTANT_RADIUS_MI]
+    result = within if within else sorted(offers, key=lambda o: o["distance_mi"])[:3]
+    result = _tag_offers(sorted(result, key=lambda o: o["price"]))
+    return {"radius_mi": INSTANT_RADIUS_MI, "exact_radius": bool(within), "offers": result}
+
+
+@api_router.post("/bookings/{booking_id}/broadcast")
+async def broadcast_bidding(booking_id: str, user: dict = Depends(get_current_user)):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    if not b or b["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {"mode": "bidding"}})
+    drivers = await db.driver_profiles.find({"status": "approved"}, {"_id": 0}).to_list(500)
+    notified = 0
+    for d in drivers:
+        dist = driver_distance_mi(d.get("home_postcode", ""), b["pickup"])
+        if dist <= BIDDING_RADIUS_MI:
+            notified += 1
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()), "driver_id": d["user_id"], "booking_id": booking_id,
+                "type": "new_job", "title": "New job in your area",
+                "body": f"{b['van_name']} · {b['pickup']} → {b['dropoff']} · {dist} mi away",
+                "read": False, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            u = await db.users.find_one({"user_id": d["user_id"]}, {"_id": 0})
+            if u:
+                try:
+                    await send_driver_job_alert(u["email"], d["name"], b)
+                except Exception as e:
+                    logger.error(f"Driver alert email failed: {e}")
+    return {"mode": "bidding", "notified_drivers": notified, "radius_mi": BIDDING_RADIUS_MI}
+
+
+@api_router.get("/bookings/{booking_id}/bids")
+async def booking_bids(booking_id: str, user: dict = Depends(get_current_user)):
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    bids = await db.bids.find({"booking_id": booking_id}, {"_id": 0}).to_list(200)
+    out = []
+    for bid in bids:
+        prof = await db.driver_profiles.find_one({"user_id": bid["driver_id"]}, {"_id": 0})
+        if not prof:
+            continue
+        out.append({
+            "driver_id": bid["driver_id"], "name": prof["name"], "vehicle": prof["vehicle"],
+            "rating": prof.get("rating", 5.0), "reviews": prof.get("reviews", 0),
+            "price": bid["price"], "distance_mi": driver_distance_mi(prof.get("home_postcode", ""), b["pickup"]),
+            "created_at": bid["created_at"],
+        })
+    return _tag_offers(sorted(out, key=lambda o: o["price"]))
+
+
+async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, customer_id: str):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    if not b or b["user_id"] != customer_id:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if b.get("driver_id"):
+        raise HTTPException(status_code=400, detail="This booking already has a driver")
+    prof = await db.driver_profiles.find_one({"user_id": driver_id}, {"_id": 0})
+    if not prof or prof.get("status") != "approved":
+        raise HTTPException(status_code=400, detail="Driver unavailable")
+
+    if b.get("mode") == "bidding":
+        bid = await db.bids.find_one({"booking_id": booking_id, "driver_id": driver_id}, {"_id": 0})
+        price = bid["price"] if bid else driver_job_price(prof, b)[0]
+    else:
+        price = driver_job_price(prof, b)[0]
+
+    if payment_type not in ("deposit", "full"):
+        raise HTTPException(status_code=400, detail="Invalid payment type")
+    deposit = round(price * DEPOSIT_PCT, 2)
+    amount = deposit if payment_type == "deposit" else price
+    now = datetime.now(timezone.utc).isoformat()
+    timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
+                {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "driver_id": driver_id,
+        "driver": {"name": prof["name"], "phone": prof["phone"], "vehicle": prof["vehicle"],
+                   "rating": prof.get("rating", 5.0)},
+        "price": price, "status": "assigned",
+        "payment": {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
+                    "balance_due": round(price - amount, 2), "paid_at": now,
+                    "transaction_id": f"MOCK-{uuid.uuid4().hex[:10].upper()}"},
+        "timeline": timeline, "mode": b.get("mode") or "instant",
+    }})
+    await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})
+    await db.bids.update_many({"booking_id": booking_id, "driver_id": driver_id}, {"$set": {"status": "accepted"}})
+    await db.bids.update_many({"booking_id": booking_id, "driver_id": {"$ne": driver_id}}, {"$set": {"status": "declined"}})
+    updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()), "driver_id": driver_id, "booking_id": booking_id, "type": "job_won",
+        "title": "You've got the job!", "body": f"{updated['pickup']} → {updated['dropoff']} · £{price:.2f}",
+        "read": False, "created_at": now,
+    })
+    try:
+        await send_booking_confirmation(updated)
+    except Exception as e:
+        logger.error(f"Confirmation email failed: {e}")
+    return updated
+
+
+@api_router.post("/bookings/{booking_id}/select-driver")
+async def select_driver(booking_id: str, data: SelectDriverInput, user: dict = Depends(get_current_user)):
+    return await _assign_and_pay(booking_id, data.driver_id, data.payment_type, user["user_id"])
 
 
 def driver_position(b: dict):
@@ -488,16 +720,62 @@ async def track_booking(booking_id: str, user: dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Booking not found")
     if b["user_id"] != user["user_id"] and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
+    driver = b.get("driver")
+    if driver and not paid(b):
+        driver = {**driver, "phone": None}
     return {
         "booking_id": b["booking_id"], "status": b["status"],
         "status_label": STATUS_LABELS.get(b["status"], b["status"]),
         "progress": STATUS_PROGRESS.get(b["status"], 0.0),
         "pickup": b["pickup"], "dropoff": b["dropoff"],
         "pickup_coords": b["pickup_coords"], "dropoff_coords": b["dropoff_coords"],
-        "driver_position": driver_position(b), "driver": b.get("driver"),
-        "timeline": b.get("timeline", []),
+        "driver_position": driver_position(b), "driver": driver, "payment": b.get("payment"),
+        "price": b.get("price"), "timeline": b.get("timeline", []),
         "eta_minutes": max(0, int((1 - STATUS_PROGRESS.get(b["status"], 0.0)) * (b["distance_miles"] * 2.2 + 15))),
     }
+
+
+# ---------------------------------------------------------------------------
+# Chat (contact-masked)
+# ---------------------------------------------------------------------------
+_PHONE_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def mask_message(text: str) -> str:
+    text = _EMAIL_RE.sub("[contact hidden]", text)
+    text = _PHONE_RE.sub("[contact hidden]", text)
+    return text
+
+
+async def _chat_participant(booking_id: str, user: dict):
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    is_customer = b["user_id"] == user["user_id"]
+    is_driver = b.get("driver_id") == user["user_id"]
+    if not (is_customer or is_driver or user.get("role") == "admin"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return b, ("customer" if is_customer else "driver")
+
+
+@api_router.get("/bookings/{booking_id}/messages")
+async def get_messages(booking_id: str, user: dict = Depends(get_current_user)):
+    await _chat_participant(booking_id, user)
+    return await db.messages.find({"booking_id": booking_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+
+
+@api_router.post("/bookings/{booking_id}/messages")
+async def post_message(booking_id: str, data: MessageInput, user: dict = Depends(get_current_user)):
+    b, role = await _chat_participant(booking_id, user)
+    if not b.get("driver_id"):
+        raise HTTPException(status_code=400, detail="Chat opens once a driver is engaged")
+    msg = {"id": str(uuid.uuid4()), "booking_id": booking_id, "sender_role": role,
+           "sender_name": user.get("name", role.title()), "text": mask_message(data.text.strip()),
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.messages.insert_one(msg)
+    msg.pop("_id", None)
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -506,15 +784,12 @@ async def track_booking(booking_id: str, user: dict = Depends(get_current_user))
 @api_router.get("/admin/stats")
 async def admin_stats(user: dict = Depends(require_admin)):
     all_b = await db.bookings.find({}, {"_id": 0, "price": 1, "status": 1}).to_list(2000)
-    active = [b for b in all_b if b["status"] not in ("completed", "cancelled")]
-    revenue = round(sum(b.get("price", 0) for b in all_b if b["status"] != "cancelled"), 2)
-    return {
-        "total_bookings": len(all_b), "active_jobs": len(active),
-        "completed": len([b for b in all_b if b["status"] == "completed"]),
-        "revenue": revenue,
-        "drivers": await db.driver_profiles.count_documents({"status": "approved"}),
-        "pending_drivers": await db.driver_profiles.count_documents({"status": "pending"}),
-    }
+    active = [b for b in all_b if b["status"] not in ("completed", "cancelled", "quoting")]
+    revenue = round(sum((b.get("price") or 0) for b in all_b if b["status"] not in ("cancelled", "quoting")), 2)
+    return {"total_bookings": len(all_b), "active_jobs": len(active),
+            "completed": len([b for b in all_b if b["status"] == "completed"]), "revenue": revenue,
+            "drivers": await db.driver_profiles.count_documents({"status": "approved"}),
+            "pending_drivers": await db.driver_profiles.count_documents({"status": "pending"})}
 
 
 @api_router.get("/admin/bookings")
@@ -538,11 +813,12 @@ async def create_driver(data: DriverInput, user: dict = Depends(require_admin)):
     await db.users.insert_one(u)
     profile = {"user_id": u["user_id"], "name": data.name.strip(), "phone": data.phone.strip(),
                "vehicle": data.vehicle.strip(), "licence_no": "-", "insurance_no": "-", "mot_expiry": None,
+               "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
+               "pricing": default_pricing(), "rating": driver_rating(u["user_id"]), "reviews": driver_reviews(u["user_id"]),
                "status": "approved", "availability": "available",
                "created_at": datetime.now(timezone.utc).isoformat()}
     await db.driver_profiles.insert_one(profile)
-    profile.pop("_id", None)
-    return profile
+    return strip_booking(profile)
 
 
 @api_router.post("/admin/drivers/{driver_user_id}/approve")
@@ -553,25 +829,9 @@ async def approve_driver(driver_user_id: str, user: dict = Depends(require_admin
     return {"status": "approved"}
 
 
-@api_router.post("/admin/bookings/{booking_id}/assign")
-async def assign_driver(booking_id: str, data: AssignInput, user: dict = Depends(require_admin)):
-    b = await db.bookings.find_one({"booking_id": booking_id})
-    if not b:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    driver = await db.driver_profiles.find_one({"user_id": data.driver_id}, {"_id": 0})
-    if not driver:
-        raise HTTPException(status_code=404, detail="Driver not found")
-    now = datetime.now(timezone.utc).isoformat()
-    timeline = b.get("timeline", [])
-    timeline.append({"status": "assigned", "label": f"{driver['name']} assigned", "at": now})
-    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
-        "driver_id": driver["user_id"],
-        "driver": {"name": driver["name"], "phone": driver["phone"], "vehicle": driver["vehicle"]},
-        "status": "assigned", "timeline": timeline}})
-    await db.driver_profiles.update_one({"user_id": driver["user_id"]}, {"$set": {"availability": "on_job"}})
-    await db.job_requests.update_many({"booking_id": booking_id, "driver_id": driver["user_id"]}, {"$set": {"status": "accepted"}})
-    await db.job_requests.update_many({"booking_id": booking_id, "driver_id": {"$ne": driver["user_id"]}}, {"$set": {"status": "declined"}})
-    return await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+@api_router.post("/admin/bookings/{booking_id}/status")
+async def update_status(booking_id: str, data: StatusInput, user: dict = Depends(require_admin)):
+    return await _apply_status(booking_id, data.status)
 
 
 async def _apply_status(booking_id, new_status):
@@ -594,11 +854,6 @@ async def _apply_status(booking_id, new_status):
     return updated
 
 
-@api_router.post("/admin/bookings/{booking_id}/status")
-async def update_status(booking_id: str, data: StatusInput, user: dict = Depends(require_admin)):
-    return await _apply_status(booking_id, data.status)
-
-
 # ---------------------------------------------------------------------------
 # Driver surface
 # ---------------------------------------------------------------------------
@@ -608,6 +863,13 @@ async def driver_profile(user: dict = Depends(require_driver)):
     if not p:
         raise HTTPException(status_code=404, detail="No driver profile")
     return p
+
+
+@api_router.post("/driver/pricing")
+async def driver_set_pricing(data: PricingInput, user: dict = Depends(require_driver)):
+    pricing = clamp_pricing(data.model_dump())
+    await db.driver_profiles.update_one({"user_id": user["user_id"]}, {"$set": {"pricing": pricing}})
+    return pricing
 
 
 @api_router.get("/driver/jobs")
@@ -632,49 +894,55 @@ async def driver_availability(data: AvailabilityInput, user: dict = Depends(requ
     return {"availability": "available" if data.available else "off"}
 
 
-async def _require_approved_driver(user: dict) -> dict:
-    p = await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    if not p or p.get("status") != "approved":
-        raise HTTPException(status_code=403, detail="Your driver account is awaiting approval")
-    return p
-
-
 @api_router.get("/driver/available")
 async def driver_available_jobs(user: dict = Depends(require_driver)):
-    await _require_approved_driver(user)
-    open_jobs = await db.bookings.find(
-        {"driver_id": None, "status": "confirmed"}, {"_id": 0}
-    ).sort("date", 1).to_list(200)
-    my_reqs = await db.job_requests.find({"driver_id": user["user_id"]}, {"_id": 0}).to_list(500)
-    requested = {r["booking_id"] for r in my_reqs}
-    return [j for j in open_jobs if j["booking_id"] not in requested]
+    prof = await _require_approved_driver(user)
+    open_jobs = await db.bookings.find({"driver_id": None, "mode": "bidding", "status": "quoting"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    my_bids = await db.bids.find({"driver_id": user["user_id"]}, {"_id": 0}).to_list(500)
+    bid_ids = {b["booking_id"] for b in my_bids}
+    out = []
+    for j in open_jobs:
+        dist = driver_distance_mi(prof.get("home_postcode", ""), j["pickup"])
+        if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
+            suggested, hours = driver_job_price(prof, j)
+            out.append({**j, "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
+    return out
 
 
-@api_router.post("/driver/jobs/{booking_id}/quote")
-async def driver_quote(booking_id: str, user: dict = Depends(require_driver)):
+@api_router.post("/driver/jobs/{booking_id}/bid")
+async def driver_bid(booking_id: str, data: BidInput, user: dict = Depends(require_driver)):
     await _require_approved_driver(user)
     b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
-    if not b or b.get("driver_id"):
-        raise HTTPException(status_code=400, detail="This job is no longer available")
-    existing = await db.job_requests.find_one({"booking_id": booking_id, "driver_id": user["user_id"]})
-    if existing:
-        return {"status": "waiting"}
-    await db.job_requests.insert_one({
-        "id": str(uuid.uuid4()), "booking_id": booking_id, "driver_id": user["user_id"],
-        "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    if not b or b.get("driver_id") or b.get("mode") != "bidding":
+        raise HTTPException(status_code=400, detail="This job is not open for bids")
+    if await db.bids.find_one({"booking_id": booking_id, "driver_id": user["user_id"]}):
+        raise HTTPException(status_code=400, detail="You already bid on this job")
+    await db.bids.insert_one({"id": str(uuid.uuid4()), "booking_id": booking_id, "driver_id": user["user_id"],
+                              "price": round(float(data.price), 2), "status": "waiting",
+                              "created_at": datetime.now(timezone.utc).isoformat()})
     return {"status": "waiting"}
 
 
 @api_router.get("/driver/requests")
 async def driver_requests(user: dict = Depends(require_driver)):
-    reqs = await db.job_requests.find({"driver_id": user["user_id"], "status": "waiting"}, {"_id": 0}).to_list(200)
+    bids = await db.bids.find({"driver_id": user["user_id"], "status": "waiting"}, {"_id": 0}).to_list(200)
     out = []
-    for r in reqs:
+    for r in bids:
         b = await db.bookings.find_one({"booking_id": r["booking_id"]}, {"_id": 0})
         if b and not b.get("driver_id"):
-            out.append({**b, "request_status": r["status"]})
+            out.append({**b, "my_bid": r["price"]})
     return out
+
+
+@api_router.get("/driver/notifications")
+async def driver_notifications(user: dict = Depends(require_driver)):
+    return await db.notifications.find({"driver_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+
+
+@api_router.post("/driver/notifications/read")
+async def driver_notifications_read(user: dict = Depends(require_driver)):
+    await db.notifications.update_many({"driver_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"status": "ok"}
 
 
 @api_router.get("/")
@@ -694,7 +962,6 @@ async def seed_admin():
                                    "name": "Dispatch Admin", "phone": None, "role": "admin",
                                    "password_hash": hash_password(admin_password), "picture": None,
                                    "created_at": datetime.now(timezone.utc).isoformat()})
-        logger.info("Seeded admin user")
     else:
         updates = {}
         if existing.get("role") != "admin":
@@ -712,6 +979,9 @@ async def on_startup():
     await db.sessions.create_index("session_token", unique=True)
     await db.bookings.create_index("booking_id", unique=True)
     await db.driver_profiles.create_index("user_id", unique=True)
+    await db.bids.create_index([("booking_id", 1), ("driver_id", 1)])
+    await db.messages.create_index("booking_id")
+    await db.notifications.create_index("driver_id")
     await seed_admin()
     try:
         await asyncio.to_thread(storage.init_storage)
@@ -721,12 +991,9 @@ async def on_startup():
 
 
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware, allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"], allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_credentials=True,
+                   allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+                   allow_methods=["*"], allow_headers=["*"])
 
 
 @app.on_event("shutdown")

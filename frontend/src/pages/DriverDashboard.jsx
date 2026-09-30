@@ -7,7 +7,10 @@ import {
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
+import { ChatModal } from "@/components/ChatModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -29,6 +32,7 @@ export default function DriverDashboard() {
   const [available, setAvailable] = useState([]);
   const [waiting, setWaiting] = useState([]);
   const [accepted, setAccepted] = useState([]);
+  const [chat, setChat] = useState(null);
 
   const approved = profile?.status === "approved";
 
@@ -47,8 +51,8 @@ export default function DriverDashboard() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const sendQuote = async (id) => {
-    try { await api.post(`/driver/jobs/${id}/quote`); toast.success("Quotation sent — awaiting confirmation"); load(); }
+  const sendQuote = async (id, price) => {
+    try { await api.post(`/driver/jobs/${id}/bid`, { price: Number(price) }); toast.success("Bid sent — awaiting customer decision"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const setStatus = async (id, status) => {
@@ -98,7 +102,7 @@ export default function DriverDashboard() {
               : available.length === 0 ? <Empty icon={Route} text="No open jobs right now. Check back soon." />
               : available.map((j) => (
                 <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`}>
-                  <Button onClick={() => sendQuote(j.booking_id)} className="w-full mt-3 bg-primary hover:bg-[#4C1D95] gap-2" data-testid={`quote-${j.booking_id}`}><Send className="h-4 w-4" /> Send quotation</Button>
+                  <BidRow job={j} onBid={sendQuote} />
                 </JobCard>
               ))}
           </TabsContent>
@@ -125,6 +129,7 @@ export default function DriverDashboard() {
                       <SelectContent>{DRIVER_STEPS.map((s) => <SelectItem key={s.v} value={s.v}>{s.l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  <Button variant="outline" size="sm" onClick={() => setChat(j.booking_id)} className="mt-2 w-full gap-1.5" data-testid={`driver-chat-${j.booking_id}`}><Send className="h-3.5 w-3.5" /> Message customer</Button>
                 </JobCard>
               ))}
           </TabsContent>
@@ -144,10 +149,12 @@ export default function DriverDashboard() {
                 <div><p className="font-medium text-slate-900 text-sm">Available for jobs</p><p className="text-xs text-slate-500">Turn off to stop receiving new work</p></div>
                 <Switch checked={profile?.availability === "available"} onCheckedChange={toggleAvailability} disabled={!approved} data-testid="driver-availability-toggle" />
               </div>
+              <PricingEditor profile={profile} onSaved={load} />
             </div>
           </TabsContent>
         </Tabs>
       </div>
+      {chat && <ChatModal bookingId={chat} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="driver" />}
     </div>
   );
 }
@@ -156,7 +163,7 @@ const JobCard = ({ job, children, showContact }) => (
   <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>
     <div className="flex items-center justify-between">
       <span className="font-heading font-semibold text-slate-900 text-sm">{job.booking_id}</span>
-      <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{job.price.toFixed(0)}</span>
+      <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{(job.my_bid ?? job.suggested_price ?? job.price ?? 0).toFixed(0)}</span>
     </div>
     <div className="mt-2 space-y-1.5 text-sm text-slate-600">
       <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {job.pickup}</p>
@@ -183,3 +190,54 @@ const Row = ({ icon: Icon, label, value }) => (
     <span className="font-medium text-slate-900">{value}</span>
   </div>
 );
+
+function BidRow({ job, onBid }) {
+  const [price, setPrice] = useState(job.suggested_price || "");
+  return (
+    <div className="mt-3">
+      <p className="text-xs text-slate-500 mb-1.5">Suggested from your rates: £{(job.suggested_price || 0).toFixed(2)} · {job.est_hours}h · {job.distance_mi} mi</p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
+          <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7" data-testid={`bid-input-${job.booking_id}`} />
+        </div>
+        <Button onClick={() => onBid(job.booking_id, price)} disabled={!price} className="bg-primary hover:bg-[#4C1D95] gap-1.5" data-testid={`quote-${job.booking_id}`}><Send className="h-4 w-4" /> Bid</Button>
+      </div>
+    </div>
+  );
+}
+
+const BANDS = { small: [35, 45], medium: [40, 50], large: [45, 55], xl: [50, 60] };
+const VAN_LABEL = { small: "Small", medium: "Medium", large: "Large", xl: "Luton XL" };
+
+function PricingEditor({ profile, onSaved }) {
+  const p = profile?.pricing || {};
+  const [rates, setRates] = useState({ small: p.rates?.small ?? 35, medium: p.rates?.medium ?? 40, large: p.rates?.large ?? 45, xl: p.rates?.xl ?? 50 });
+  const [stairs, setStairs] = useState(p.stairs_fee ?? 5);
+  const [helper, setHelper] = useState(p.helper_rate ?? 15);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try { await api.post("/driver/pricing", { rates: { small: Number(rates.small), medium: Number(rates.medium), large: Number(rates.large), xl: Number(rates.xl) }, stairs_fee: Number(stairs), helper_rate: Number(helper) }); toast.success("Pricing saved"); onSaved && onSaved(); }
+    catch (e) { toast.error("Could not save pricing"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="pt-4 border-t border-slate-100" data-testid="pricing-editor">
+      <p className="font-semibold text-slate-900 text-sm mb-3">Your hourly rates</p>
+      <div className="grid grid-cols-2 gap-3">
+        {Object.keys(BANDS).map((v) => (
+          <div key={v} className="space-y-1">
+            <Label className="text-xs">{VAN_LABEL[v]} (£{BANDS[v][0]}–{BANDS[v][1]})</Label>
+            <Input type="number" min={BANDS[v][0]} max={BANDS[v][1]} value={rates[v]} onChange={(e) => setRates((r) => ({ ...r, [v]: e.target.value }))} data-testid={`rate-${v}`} />
+          </div>
+        ))}
+        <div className="space-y-1"><Label className="text-xs">Stairs/floor (£5–15)</Label><Input type="number" min={5} max={15} value={stairs} onChange={(e) => setStairs(e.target.value)} data-testid="rate-stairs" /></div>
+        <div className="space-y-1"><Label className="text-xs">Helper /hr (£15–25)</Label><Input type="number" min={15} max={25} value={helper} onChange={(e) => setHelper(e.target.value)} data-testid="rate-helper" /></div>
+      </div>
+      <Button onClick={save} disabled={busy} className="mt-3 w-full bg-primary hover:bg-[#4C1D95]" data-testid="save-pricing">{busy ? "Saving…" : "Save pricing"}</Button>
+    </div>
+  );
+}
