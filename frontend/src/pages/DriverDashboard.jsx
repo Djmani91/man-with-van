@@ -150,6 +150,7 @@ export default function DriverDashboard() {
                 <Switch checked={profile?.availability === "available"} onCheckedChange={toggleAvailability} disabled={!approved} data-testid="driver-availability-toggle" />
               </div>
               <PricingEditor profile={profile} onSaved={load} />
+              <DocumentsUploader profile={profile} onSaved={load} />
             </div>
           </TabsContent>
         </Tabs>
@@ -238,6 +239,48 @@ function PricingEditor({ profile, onSaved }) {
         <div className="space-y-1"><Label className="text-xs">Helper /hr (£15–25)</Label><Input type="number" min={15} max={25} value={helper} onChange={(e) => setHelper(e.target.value)} data-testid="rate-helper" /></div>
       </div>
       <Button onClick={save} disabled={busy} className="mt-3 w-full bg-primary hover:bg-[#4C1D95]" data-testid="save-pricing">{busy ? "Saving…" : "Save pricing"}</Button>
+    </div>
+  );
+}
+
+function DocView({ label, field, value, onUpload, uploading }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl py-4 cursor-pointer hover:border-violet-400 transition-colors text-xs text-slate-500 overflow-hidden" data-testid={`doc-label-${field}`}>
+        {uploading === field ? <Loader2 className="h-4 w-4 animate-spin" /> : value ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Send className="h-4 w-4" />}
+        {uploading === field ? "Uploading…" : value ? "Uploaded ✓ — replace" : "Tap to upload"}
+        <input type="file" accept="image/*" className="hidden" onChange={(e) => onUpload(field, e)} data-testid={`doc-input-${field}`} />
+      </label>
+    </div>
+  );
+}
+
+function DocumentsUploader({ profile, onSaved }) {
+  const [uploading, setUploading] = useState(null);
+  const upload = async (field, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(field);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      await api.post("/driver/documents", { [field]: data.path });
+      toast.success("Document uploaded");
+      onSaved && onSaved();
+    } catch (err) { toast.error("Upload failed"); }
+    finally { setUploading(null); e.target.value = ""; }
+  };
+  return (
+    <div className="pt-4 border-t border-slate-100" data-testid="documents-uploader">
+      <p className="font-semibold text-slate-900 text-sm mb-1">Documents</p>
+      <p className="text-xs text-slate-500 mb-3">Upload these to get approved: profile photo, driving licence &amp; insurance.</p>
+      <div className="grid grid-cols-1 gap-3">
+        <DocView label="Profile picture" field="profile_photo" value={profile?.profile_photo} onUpload={upload} uploading={uploading} />
+        <DocView label="Driving licence" field="licence_photo" value={profile?.licence_photo} onUpload={upload} uploading={uploading} />
+        <DocView label="Insurance certificate" field="insurance_photo" value={profile?.insurance_photo} onUpload={upload} uploading={uploading} />
+      </div>
     </div>
   );
 }

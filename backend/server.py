@@ -270,6 +270,7 @@ class DriverRegisterInput(BaseModel):
     insurance_no: str
     mot_expiry: Optional[str] = None
     home_postcode: str
+    address: Optional[str] = None
     pricing: Optional[PricingInput] = None
 
 
@@ -339,6 +340,16 @@ class MessageInput(BaseModel):
     text: str
 
 
+class DocumentsInput(BaseModel):
+    profile_photo: Optional[str] = None
+    licence_photo: Optional[str] = None
+    insurance_photo: Optional[str] = None
+
+
+class AssignInput(BaseModel):
+    driver_id: str
+
+
 # ---------------------------------------------------------------------------
 # Auth routes
 # ---------------------------------------------------------------------------
@@ -370,6 +381,8 @@ async def driver_register(data: DriverRegisterInput, response: Response):
         "vehicle": data.vehicle.strip(), "licence_no": data.licence_no.strip(),
         "insurance_no": data.insurance_no.strip(), "mot_expiry": data.mot_expiry,
         "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
+        "address": (data.address or "").strip() or None,
+        "profile_photo": None, "licence_photo": None, "insurance_photo": None,
         "pricing": pricing, "rating": driver_rating(user["user_id"]), "reviews": driver_reviews(user["user_id"]),
         "status": "pending", "availability": "available",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -543,7 +556,7 @@ async def my_bookings(user: dict = Depends(get_current_user)):
 
 
 def paid(b: dict) -> bool:
-    return (b.get("payment") or {}).get("status") == "paid"
+    return (b.get("payment") or {}).get("status") in ("paid", "office")
 
 
 def mask_contact_for_customer(b: dict) -> dict:
@@ -829,6 +842,38 @@ async def approve_driver(driver_user_id: str, user: dict = Depends(require_admin
     return {"status": "approved"}
 
 
+@api_router.post("/admin/bookings/{booking_id}/assign")
+async def admin_assign(booking_id: str, data: AssignInput, user: dict = Depends(require_admin)):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    if not b:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    prof = await db.driver_profiles.find_one({"user_id": data.driver_id}, {"_id": 0})
+    if not prof or prof.get("status") != "approved":
+        raise HTTPException(status_code=400, detail="Driver not found or not approved")
+    price, _ = driver_job_price(prof, b)
+    now = datetime.now(timezone.utc).isoformat()
+    timeline = b.get("timeline", [])
+    if not any(t.get("status") == "confirmed" for t in timeline):
+        timeline.append({"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now})
+    timeline.append({"status": "assigned", "label": f"{prof['name']} assigned by dispatch", "at": now})
+    payment = b.get("payment") or {}
+    if payment.get("status") != "paid":
+        payment = {"status": "office", "type": "office", "amount": 0.0, "deposit": 0.0,
+                   "balance_due": price, "paid_at": now, "transaction_id": None}
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "driver_id": prof["user_id"],
+        "driver": {"name": prof["name"], "phone": prof["phone"], "vehicle": prof["vehicle"], "rating": prof.get("rating", 5.0)},
+        "price": price, "status": "assigned", "payment": payment, "mode": b.get("mode") or "office", "timeline": timeline,
+    }})
+    await db.driver_profiles.update_one({"user_id": prof["user_id"]}, {"$set": {"availability": "on_job"}})
+    updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    try:
+        await send_booking_confirmation(updated)
+    except Exception as e:
+        logger.error(f"Confirmation email failed: {e}")
+    return updated
+
+
 @api_router.post("/admin/bookings/{booking_id}/status")
 async def update_status(booking_id: str, data: StatusInput, user: dict = Depends(require_admin)):
     return await _apply_status(booking_id, data.status)
@@ -870,6 +915,14 @@ async def driver_set_pricing(data: PricingInput, user: dict = Depends(require_dr
     pricing = clamp_pricing(data.model_dump())
     await db.driver_profiles.update_one({"user_id": user["user_id"]}, {"$set": {"pricing": pricing}})
     return pricing
+
+
+@api_router.post("/driver/documents")
+async def driver_set_documents(data: DocumentsInput, user: dict = Depends(require_driver)):
+    updates = {k: v for k, v in data.model_dump().items() if v}
+    if updates:
+        await db.driver_profiles.update_one({"user_id": user["user_id"]}, {"$set": updates})
+    return await db.driver_profiles.find_one({"user_id": user["user_id"]}, {"_id": 0})
 
 
 @api_router.get("/driver/jobs")

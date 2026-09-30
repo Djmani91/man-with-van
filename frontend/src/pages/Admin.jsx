@@ -17,8 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 
 const STATUSES = ["confirmed", "assigned", "en_route_pickup", "loading", "in_transit", "completed", "cancelled"];
-const STATUS_LABEL = { confirmed: "Confirmed", assigned: "Assigned", en_route_pickup: "En route", loading: "Loading", in_transit: "In transit", completed: "Completed", cancelled: "Cancelled" };
-const STATUS_STYLE = { confirmed: "bg-violet-100 text-violet-700", assigned: "bg-blue-100 text-blue-700", en_route_pickup: "bg-amber-100 text-amber-700", loading: "bg-amber-100 text-amber-700", in_transit: "bg-emerald-100 text-emerald-700", completed: "bg-slate-200 text-slate-600", cancelled: "bg-red-100 text-red-700" };
+const STATUS_LABEL = { quoting: "Choosing driver", confirmed: "Confirmed", assigned: "Assigned", en_route_pickup: "En route", loading: "Loading", in_transit: "In transit", completed: "Completed", cancelled: "Cancelled" };
+const STATUS_STYLE = { quoting: "bg-amber-100 text-amber-700", confirmed: "bg-violet-100 text-violet-700", assigned: "bg-blue-100 text-blue-700", en_route_pickup: "bg-amber-100 text-amber-700", loading: "bg-amber-100 text-amber-700", in_transit: "bg-emerald-100 text-emerald-700", completed: "bg-slate-200 text-slate-600", cancelled: "bg-red-100 text-red-700" };
 
 export default function Admin() {
   const { logout } = useAuth();
@@ -94,7 +94,7 @@ export default function Admin() {
                       <TableCell className="text-xs max-w-[180px] truncate">{b.pickup} → {b.dropoff}</TableCell>
                       <TableCell className="text-xs whitespace-nowrap">{b.date} {b.time}</TableCell>
                       <TableCell className="text-xs">{b.van_name}</TableCell>
-                      <TableCell className="font-semibold text-sm">£{b.price.toFixed(0)}</TableCell>
+                      <TableCell className="font-semibold text-sm">{b.price ? `£${b.price.toFixed(0)}` : "—"}</TableCell>
                       <TableCell className="text-xs">
                         {b.driver ? b.driver.name : (
                           <Select onValueChange={(v) => assign(b.booking_id, v)}>
@@ -124,22 +124,25 @@ export default function Admin() {
             <div className="flex justify-end mb-4"><AddDriverDialog onAdded={load} /></div>
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
               <Table data-testid="admin-drivers-table">
-                <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Vehicle</TableHead><TableHead>Licence</TableHead><TableHead>Approval</TableHead><TableHead>Availability</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Vehicle</TableHead><TableHead>Licence</TableHead><TableHead>Docs</TableHead><TableHead>Approval</TableHead><TableHead>Availability</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {drivers.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">No drivers yet.</TableCell></TableRow>}
-                  {drivers.map((d) => (
+                  {drivers.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">No drivers yet.</TableCell></TableRow>}
+                  {drivers.map((d) => {
+                    const docs = ["profile_photo", "licence_photo", "insurance_photo"].filter((k) => d[k]).length;
+                    return (
                     <TableRow key={d.user_id} data-testid={`driver-row-${d.user_id}`}>
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell className="text-sm">{d.phone}</TableCell>
                       <TableCell className="text-sm">{d.vehicle}</TableCell>
                       <TableCell className="text-sm">{d.licence_no}</TableCell>
+                      <TableCell><Badge className={docs === 3 ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"} data-testid={`docs-${d.user_id}`}>{docs}/3</Badge></TableCell>
                       <TableCell><Badge className={d.status === "approved" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"}>{d.status === "approved" ? "Approved" : "Pending"}</Badge></TableCell>
                       <TableCell><Badge className={d.availability === "available" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-slate-200 text-slate-600 border-0"}>{d.availability === "available" ? "Available" : d.availability === "on_job" ? "On job" : "Off"}</Badge></TableCell>
                       <TableCell className="text-right">
                         {d.status === "pending" && <Button size="sm" onClick={() => approve(d.user_id)} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" data-testid={`approve-${d.user_id}`}><UserCheck className="h-4 w-4" /> Approve</Button>}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  );})}
                 </TableBody>
               </Table>
             </div>

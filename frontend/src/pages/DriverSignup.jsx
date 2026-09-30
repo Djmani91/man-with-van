@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export default function DriverSignup() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", address: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -30,7 +30,7 @@ export default function DriverSignup() {
       const payload = {
         name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password,
         vehicle: form.vehicle.trim(), licence_no: form.licence_no.trim(), insurance_no: form.insurance_no.trim(),
-        mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode.trim(),
+        mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode.trim(), address: form.address.trim(),
         pricing: {
           rates: { small: num(form.rate_small, 35), medium: num(form.rate_medium, 40), large: num(form.rate_large, 45), xl: num(form.rate_xl, 50) },
           stairs_fee: num(form.stairs_fee, 5), helper_rate: num(form.helper_rate, 15),
@@ -67,6 +67,7 @@ export default function DriverSignup() {
           <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={set("password")} data-testid="ds-password" /></div>
           <div className="space-y-2"><Label>Vehicle</Label><Input value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="ds-vehicle" /></div>
           <div className="space-y-2"><Label>Home base postcode</Label><Input value={form.home_postcode} onChange={set("home_postcode")} placeholder="e.g. M1 1AA — used to find jobs near you" data-testid="ds-home" /></div>
+          <div className="space-y-2"><Label>Home address <span className="text-slate-400 font-normal">(optional)</span></Label><Input value={form.address} onChange={set("address")} placeholder="Street, city" data-testid="ds-address" /></div>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Licence number</Label><Input value={form.licence_no} onChange={set("licence_no")} data-testid="ds-licence" /></div>
             <div className="space-y-2"><Label>Insurance policy no.</Label><Input value={form.insurance_no} onChange={set("insurance_no")} data-testid="ds-insurance" /></div>
