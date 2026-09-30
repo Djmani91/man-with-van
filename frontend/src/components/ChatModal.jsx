@@ -5,14 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-export const ChatModal = ({ bookingId, open, onOpenChange, meRole = "customer" }) => {
+export const ChatModal = ({ bookingId, driverId, open, onOpenChange, meRole = "customer" }) => {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
+  const qs = driverId ? `?driver_id=${driverId}` : "";
 
   const load = async () => {
-    try { const { data } = await api.get(`/bookings/${bookingId}/messages`); setMessages(data); } catch {}
+    try { const { data } = await api.get(`/bookings/${bookingId}/messages${qs}`); setMessages(data); } catch {}
   };
   useEffect(() => {
     if (!open) return;
@@ -20,14 +21,14 @@ export const ChatModal = ({ bookingId, open, onOpenChange, meRole = "customer" }
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, bookingId]);
+  }, [open, bookingId, driverId]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const send = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
     setBusy(true);
-    try { await api.post(`/bookings/${bookingId}/messages`, { text }); setText(""); load(); } catch {}
+    try { await api.post(`/bookings/${bookingId}/messages${qs}`, { text }); setText(""); load(); } catch {}
     finally { setBusy(false); }
   };
 
@@ -36,7 +37,7 @@ export const ChatModal = ({ bookingId, open, onOpenChange, meRole = "customer" }
       <DialogContent className="max-w-md p-0 overflow-hidden" data-testid="chat-modal">
         <DialogHeader className="px-5 pt-5">
           <DialogTitle>Chat</DialogTitle>
-          <DialogDescription className="flex items-center gap-1.5 text-amber-600 text-xs"><ShieldAlert className="h-3.5 w-3.5" /> For your safety, phone numbers & emails are hidden until deposit is paid.</DialogDescription>
+          <DialogDescription className="flex items-center gap-1.5 text-amber-600 text-xs"><ShieldAlert className="h-3.5 w-3.5" /> For your safety, phone numbers, emails & addresses are automatically hidden.</DialogDescription>
         </DialogHeader>
         <div className="h-72 overflow-y-auto px-5 py-3 space-y-2 bg-slate-50" data-testid="chat-messages">
           {messages.length === 0 && <p className="text-center text-sm text-slate-400 mt-8">No messages yet. Say hello 👋</p>}

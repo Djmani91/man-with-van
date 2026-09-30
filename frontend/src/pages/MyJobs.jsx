@@ -84,6 +84,8 @@ export default function MyJobs() {
     setPayFor({ driverId, price });
   };
 
+  const chatWithOffer = (driverId) => { if (active) setChat({ bookingId: active.booking_id, driverId }); };
+
   const payBase = payFor ? (() => {
     const eff = payFor.price * (1 - promoPct);
     return payType === "deposit" ? eff * 0.15 : eff;
@@ -190,7 +192,7 @@ export default function MyJobs() {
                   </div>
                 )}
                 <OfferList offers={offers?.offers} loading={offers === null} note={`Drivers within ${offers?.radius_mi || 5} miles`}
-                  onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
+                  onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
               </div>
             ) : (
               <div className="space-y-3">
@@ -200,7 +202,7 @@ export default function MyJobs() {
                 </div>
                 {bids.length === 0
                   ? <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400" data-testid="no-bids">Bids will appear here as drivers respond — this can take a little while.</div>
-                  : <OfferList offers={bids} onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />}
+                  : <OfferList offers={bids} onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />}
               </div>
             )}
           </div>
@@ -229,7 +231,7 @@ export default function MyJobs() {
                 <div className="flex items-center justify-between mt-3">
                   <span className="font-heading text-lg font-bold text-slate-900">£{(b.price || 0).toFixed(2)}</span>
                   <div className="flex gap-2">
-                    {b.driver && <Button size="sm" variant="outline" onClick={() => setChat(b.booking_id)} data-testid={`chat-${b.booking_id}`} className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Message</Button>}
+                    {b.driver && <Button size="sm" variant="outline" onClick={() => setChat({ bookingId: b.booking_id, driverId: b.driver_id })} data-testid={`chat-${b.booking_id}`} className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Message</Button>}
                     <Button size="sm" onClick={() => navigate(`/track/${b.booking_id}`)} className="bg-primary hover:bg-[#4C1D95] gap-1.5" data-testid={`track-${b.booking_id}`}>Track <ArrowRight className="h-3.5 w-3.5" /></Button>
                   </div>
                 </div>
@@ -239,7 +241,7 @@ export default function MyJobs() {
         )}
       </div>
 
-      {chat && <ChatModal bookingId={chat} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="customer" />}
+      {chat && <ChatModal bookingId={chat.bookingId} driverId={chat.driverId} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="customer" />}
       {payFor && (
         <SquarePaymentModal
           open={!!payFor}
@@ -285,7 +287,7 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <Button variant="outline" onClick={() => onChat && onChatUnavailable()} disabled className="gap-1.5 opacity-60" title="Chat opens after you accept" data-testid={`offer-msg-${o.driver_id}`}><MessageSquare className="h-4 w-4" /> Message</Button>
+            <Button variant="outline" onClick={() => onChat(o.driver_id)} className="gap-1.5" data-testid={`offer-msg-${o.driver_id}`}><MessageSquare className="h-4 w-4" /> Message</Button>
             <Button onClick={() => onAccept(o.driver_id, o.price)} disabled={!payType || accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
               {accepting === o.driver_id ? "Processing…" : !payType ? "Choose payment first" : `Accept — £${((payType === "deposit" ? o.price * 0.15 : o.price) * (1 - promoPct)).toFixed(2)}`}
             </Button>
@@ -295,7 +297,6 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
     </div>
   );
 }
-function onChatUnavailable() {}
 
 function ProfileModal({ profile, onClose }) {
   return (

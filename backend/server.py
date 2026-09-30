@@ -1264,32 +1264,44 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 def mask_message(text: str) -> str:
     text = _EMAIL_RE.sub("[contact hidden]", text)
     text = _PHONE_RE.sub("[contact hidden]", text)
+    text = _POSTCODE_RE.sub("[address hidden]", text)
     return text
 
 
-async def _chat_participant(booking_id: str, user: dict):
+async def _chat_thread(booking_id: str, user: dict, driver_id: str = None):
     b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     if not b:
         raise HTTPException(status_code=404, detail="Booking not found")
-    is_customer = b["user_id"] == user["user_id"]
-    is_driver = b.get("driver_id") == user["user_id"]
-    if not (is_customer or is_driver or user.get("role") == "admin"):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    return b, ("customer" if is_customer else "driver")
+    if b["user_id"] == user["user_id"]:
+        if not driver_id:
+            raise HTTPException(status_code=400, detail="driver_id required")
+        return b, "customer", driver_id
+    if user.get("role") == "driver":
+        return b, "driver", user["user_id"]
+    if user.get("role") == "admin":
+        return b, "admin", (driver_id or b.get("driver_id"))
+    raise HTTPException(status_code=403, detail="Not allowed")
+
+
+def _thread_query(booking_id: str, b: dict, thread_driver: str) -> dict:
+    # Include legacy messages (stored without driver_id) in the assigned driver's thread.
+    if b.get("driver_id") and b.get("driver_id") == thread_driver:
+        return {"booking_id": booking_id, "$or": [{"driver_id": thread_driver}, {"driver_id": {"$exists": False}}]}
+    return {"booking_id": booking_id, "driver_id": thread_driver}
 
 
 @api_router.get("/bookings/{booking_id}/messages")
-async def get_messages(booking_id: str, user: dict = Depends(get_current_user)):
-    await _chat_participant(booking_id, user)
-    return await db.messages.find({"booking_id": booking_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+async def get_messages(booking_id: str, driver_id: str = Query(None), user: dict = Depends(get_current_user)):
+    b, role, thread = await _chat_thread(booking_id, user, driver_id)
+    return await db.messages.find(_thread_query(booking_id, b, thread), {"_id": 0}).sort("created_at", 1).to_list(500)
 
 
 @api_router.post("/bookings/{booking_id}/messages")
-async def post_message(booking_id: str, data: MessageInput, user: dict = Depends(get_current_user)):
-    b, role = await _chat_participant(booking_id, user)
-    if not b.get("driver_id"):
-        raise HTTPException(status_code=400, detail="Chat opens once a driver is engaged")
-    msg = {"id": str(uuid.uuid4()), "booking_id": booking_id, "sender_role": role,
+async def post_message(booking_id: str, data: MessageInput, driver_id: str = Query(None), user: dict = Depends(get_current_user)):
+    b, role, thread = await _chat_thread(booking_id, user, driver_id)
+    if not thread:
+        raise HTTPException(status_code=400, detail="No driver selected for this chat")
+    msg = {"id": str(uuid.uuid4()), "booking_id": booking_id, "driver_id": thread, "sender_role": role,
            "sender_name": user.get("name", role.title()), "text": mask_message(data.text.strip()),
            "created_at": datetime.now(timezone.utc).isoformat()}
     await db.messages.insert_one(msg)
@@ -1542,6 +1554,32 @@ async def driver_set_documents(data: DocumentsInput, user: dict = Depends(requir
 async def driver_jobs(user: dict = Depends(require_driver)):
     jobs = await db.bookings.find({"driver_id": user["user_id"]}, {"_id": 0}).sort("date", 1).to_list(200)
     return [driver_job_view(j, reveal=paid(j)) for j in jobs]
+
+
+@api_router.get("/driver/conversations")
+async def driver_conversations(user: dict = Depends(require_driver)):
+    me = user["user_id"]
+    msg_ids = await db.messages.distinct("booking_id", {"driver_id": me})
+    assigned = await db.bookings.find({"driver_id": me}, {"_id": 0}).to_list(500)
+    ids = list({*msg_ids, *[b["booking_id"] for b in assigned]})
+    convos = []
+    for bid in ids:
+        b = await db.bookings.find_one({"booking_id": bid}, {"_id": 0})
+        if not b:
+            continue
+        last = await db.messages.find(_thread_query(bid, b, me), {"_id": 0}).sort("created_at", -1).to_list(1)
+        lm = last[0] if last else None
+        convos.append({
+            "booking_id": bid,
+            "customer_name": b.get("customer_name") or "Customer",
+            "pickup_postcode": extract_postcode(b.get("pickup", "")),
+            "dropoff_postcode": extract_postcode(b.get("dropoff", "")),
+            "date": b.get("date"), "status": b.get("status"),
+            "last_text": lm["text"] if lm else None,
+            "last_at": (lm["created_at"] if lm else b.get("created_at")) or "",
+        })
+    convos.sort(key=lambda c: c["last_at"], reverse=True)
+    return convos
 
 
 @api_router.post("/driver/jobs/{booking_id}/status")

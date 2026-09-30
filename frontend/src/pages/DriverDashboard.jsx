@@ -40,6 +40,7 @@ export default function DriverDashboard() {
   const [available, setAvailable] = useState([]);
   const [waiting, setWaiting] = useState([]);
   const [accepted, setAccepted] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [chat, setChat] = useState(null);
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState("quotation");
@@ -53,6 +54,8 @@ export default function DriverDashboard() {
     setProfile(p);
     const acc = await api.get("/driver/jobs").then((r) => r.data).catch(() => []);
     setAccepted(acc);
+    const conv = await api.get("/driver/conversations").then((r) => r.data).catch(() => []);
+    setConversations(conv);
     if (p?.status === "approved") {
       const [av, wt] = await Promise.all([
         api.get("/driver/available").then((r) => r.data).catch(() => []),
@@ -217,20 +220,20 @@ export default function DriverDashboard() {
         {/* MESSAGE */}
         {tab === "message" && (
           <div className="space-y-3" data-testid="driver-message-list">
-            {accepted.length === 0 ? <Empty icon={MessageSquare} text="No conversations yet. Chats appear once you have an accepted job." />
-              : accepted.map((j) => (
-                <button key={j.booking_id} onClick={() => setChat(j.booking_id)} data-testid={`conversation-${j.booking_id}`}
+            {conversations.length === 0 ? <Empty icon={MessageSquare} text="No conversations yet. Messages from customers will appear here." />
+              : conversations.map((c) => (
+                <button key={c.booking_id} onClick={() => setChat(c.booking_id)} data-testid={`conversation-${c.booking_id}`}
                   className="w-full text-left bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3 hover:border-violet-300 transition-colors">
                   <div className="h-11 w-11 rounded-full bg-violet-100 text-primary font-bold flex items-center justify-center shrink-0">
-                    {(j.customer_name || "?").trim().charAt(0).toUpperCase()}
+                    {(c.customer_name || "?").trim().charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-slate-900 truncate">{j.customer_name || "Customer"}</p>
-                      <span className="text-xs text-slate-400 shrink-0">{j.booking_id}</span>
+                      <p className="font-semibold text-slate-900 truncate">{c.customer_name || "Customer"}</p>
+                      <span className="text-xs text-slate-400 shrink-0">{c.booking_id}</span>
                     </div>
-                    <p className="text-xs text-slate-500 truncate">{(j.pickup || j.pickup_postcode)} → {(j.dropoff || j.dropoff_postcode)}</p>
-                    <p className="text-xs text-slate-400">{j.date} · {LABEL[j.status] || j.status}</p>
+                    <p className="text-xs text-slate-500 truncate">{c.pickup_postcode || "—"} → {c.dropoff_postcode || "—"}</p>
+                    <p className="text-xs text-slate-400 truncate">{c.last_text ? c.last_text : `${c.date || ""} · ${LABEL[c.status] || c.status}`}</p>
                   </div>
                   <MessageSquare className="h-5 w-5 text-primary shrink-0" />
                 </button>
