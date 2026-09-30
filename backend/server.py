@@ -944,7 +944,13 @@ async def admin_bookings(user: dict = Depends(require_admin)):
 
 @api_router.get("/admin/drivers")
 async def admin_drivers(user: dict = Depends(require_admin)):
-    return await db.driver_profiles.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    profiles = await db.driver_profiles.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    ids = [p["user_id"] for p in profiles]
+    users = await db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "email": 1}).to_list(len(ids) or 1)
+    email_by_id = {u["user_id"]: u.get("email") for u in users}
+    for p in profiles:
+        p["email"] = email_by_id.get(p["user_id"])
+    return profiles
 
 
 @api_router.post("/admin/drivers")

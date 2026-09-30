@@ -26,6 +26,7 @@ export default function Admin() {
   const [stats, setStats] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [driverSearch, setDriverSearch] = useState("");
 
   const load = useCallback(async () => {
     const [s, b, d] = await Promise.all([api.get("/admin/stats"), api.get("/admin/bookings"), api.get("/admin/drivers")]);
@@ -35,6 +36,10 @@ export default function Admin() {
 
   const availableDrivers = drivers.filter((d) => d.status === "approved" && d.availability === "available");
   const pendingDrivers = drivers.filter((d) => d.status === "pending");
+  const q = driverSearch.trim().toLowerCase();
+  const filteredDrivers = q
+    ? drivers.filter((d) => [d.name, d.email, d.phone, d.vehicle].some((v) => (v || "").toLowerCase().includes(q)))
+    : drivers;
 
   const assign = async (id, driverId) => {
     try { await api.post(`/admin/bookings/${id}/assign`, { driver_id: driverId }); toast.success("Driver assigned"); load(); }
@@ -121,20 +126,23 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="drivers" className="mt-4">
-            <div className="flex justify-end mb-4"><AddDriverDialog onAdded={load} /></div>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between mb-4">
+              <Input value={driverSearch} onChange={(e) => setDriverSearch(e.target.value)} placeholder="Search driver by name, email or phone…" className="sm:max-w-xs bg-white" data-testid="driver-search" />
+              <AddDriverDialog onAdded={load} />
+            </div>
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
               <Table data-testid="admin-drivers-table">
-                <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Vehicle</TableHead><TableHead>Licence</TableHead><TableHead>Docs</TableHead><TableHead>Approval</TableHead><TableHead>Availability</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Vehicle</TableHead><TableHead>Docs</TableHead><TableHead>Approval</TableHead><TableHead>Availability</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {drivers.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">No drivers yet.</TableCell></TableRow>}
-                  {drivers.map((d) => {
+                  {filteredDrivers.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">{drivers.length === 0 ? "No drivers yet." : "No drivers match your search."}</TableCell></TableRow>}
+                  {filteredDrivers.map((d) => {
                     const docs = ["profile_photo", "licence_photo", "insurance_photo"].filter((k) => d[k]).length;
                     return (
                     <TableRow key={d.user_id} data-testid={`driver-row-${d.user_id}`}>
                       <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell className="text-sm" data-testid={`driver-email-${d.user_id}`}>{d.email || "—"}</TableCell>
                       <TableCell className="text-sm">{d.phone}</TableCell>
                       <TableCell className="text-sm">{d.vehicle}</TableCell>
-                      <TableCell className="text-sm">{d.licence_no}</TableCell>
                       <TableCell><Badge className={docs === 3 ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"} data-testid={`docs-${d.user_id}`}>{docs}/3</Badge></TableCell>
                       <TableCell><Badge className={d.status === "approved" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-amber-100 text-amber-700 border-0"}>{d.status === "approved" ? "Approved" : "Pending"}</Badge></TableCell>
                       <TableCell><Badge className={d.availability === "available" ? "bg-emerald-100 text-emerald-700 border-0" : "bg-slate-200 text-slate-600 border-0"}>{d.availability === "available" ? "Available" : d.availability === "on_job" ? "On job" : "Off"}</Badge></TableCell>
