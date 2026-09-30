@@ -54,9 +54,11 @@ Moving/removals booking platform. Customers get an instant quote, book a local v
 - Decide edge-case policies (cancellation window, no-driver-available handling)
 
 ## Mobile app store identifiers (for future React Native build — NOT used by the web app)
-- iOS bundle ID (Apple / App Store Connect): com.base6a789f0035d4228147cfc5c9.app
-- Reuse the same identifier so the store listing, reviews and existing users carry over on update.
-- Action: apply this in the React Native iOS project (Xcode > Bundle Identifier) when the mobile app is built. No effect on the current web platform.
+- SINGLE shared identifier, used VERBATIM on BOTH platforms (no prefix/suffix/module name appended):
+  com.base6a789f0035d4228147cfc5c9.app
+  - iOS bundle identifier (Xcode Target > Bundle Identifier; App Store Connect App ID): com.base6a789f0035d4228147cfc5c9.app
+  - Android applicationId / package name (app/build.gradle): com.base6a789f0035d4228147cfc5c9.app
+- CRITICAL: user already has LIVE apps on the App Store and Google Play under this exact ID. Reuse it exactly so it ships as an UPDATE and preserves reviews, ratings, ranking and existing users. Do NOT create a new/renamed identifier.
 
 ## Marketplace layer status (iteration_3 — 100% backend 25/25 + frontend E2E passed)
 - Customer app shell: bottom tabs Book/My Jobs/Messages/Account.
