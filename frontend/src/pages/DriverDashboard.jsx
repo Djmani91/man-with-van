@@ -79,6 +79,11 @@ export default function DriverDashboard() {
     try { const { data } = await api.post(`/driver/jobs/${id}/accept`); toast.success(data.message || "Job accepted"); setDetail(null); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); load(); }
   };
+  const declineJob = async (id) => {
+    if (!window.confirm("Decline this job? It will be removed from your quotation page.")) return;
+    try { const { data } = await api.post(`/driver/jobs/${id}/decline`); toast.success(data.message || "Job declined"); setDetail(null); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); load(); }
+  };
   const setStatus = async (id, status) => {
     try { await api.post(`/driver/jobs/${id}/status`, { status }); toast.success("Status updated"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -292,7 +297,7 @@ export default function DriverDashboard() {
         <DriverJobDetail
           job={detail.job} mode={detail.mode}
           onClose={() => setDetail(null)}
-          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }} onCancel={cancelJob} onAccept={acceptJob} onWithdraw={withdrawQuote}
+          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }} onCancel={cancelJob} onAccept={acceptJob} onDecline={declineJob} onWithdraw={withdrawQuote}
           DRIVER_STEPS={DRIVER_STEPS} LABEL={LABEL}
         />
       )}

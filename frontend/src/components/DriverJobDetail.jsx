@@ -32,10 +32,12 @@ function stairsWarning(job) {
   return null;
 }
 
-export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, onWithdraw, DRIVER_STEPS, LABEL }) {
+export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, onDecline, onWithdraw, DRIVER_STEPS, LABEL }) {
   const [price, setPrice] = useState(job.my_bid || "");
   const quotesUsed = job.quotes_used || 0;
   const quotesLeft = Math.max(0, 2 - quotesUsed);
+  const MIN_BID = 50;
+  const belowMin = price !== "" && Number(price) < MIN_BID;
   const dist = job.distance_mi ?? job.distance_miles;
   const hours = job.est_hours ?? job.estimated_hours;
   const warning = stairsWarning(job);
@@ -202,9 +204,10 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
         {mode === "quotation" && (
           job.fixed_price ? (
             <div className="border-t border-slate-200 pt-4 space-y-3">
+              <Button onClick={() => onAccept(job.booking_id)} className="w-full bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-accept"><CheckCircle2 className="h-4 w-4 mr-2" /> Accept job</Button>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => onAccept(job.booking_id)} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-accept"><CheckCircle2 className="h-4 w-4 mr-2" /> Accept job</Button>
-                <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
+                <Button onClick={() => onDecline(job.booking_id)} variant="outline" className="h-12 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" data-testid="job-detail-decline"><X className="h-4 w-4 mr-2" /> Cancel</Button>
+                <Button onClick={() => onChat(job.booking_id)} variant="outline" className="h-12" data-testid="job-detail-message"><Send className="h-4 w-4 mr-2" /> Message</Button>
               </div>
             </div>
           ) : (
@@ -213,12 +216,13 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
                 <p className="text-xs text-slate-500 mb-1.5">Your quote (you keep {Math.round((1 - (job.commission_rate ?? 0.15)) * 100)}% — £{((Number(price) || 0) * (1 - (job.commission_rate ?? 0.15))).toFixed(2)})</p>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
-                  <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7 h-12 text-lg" data-testid="job-detail-quote-input" />
+                  <Input type="number" min={MIN_BID} value={price} onChange={(e) => setPrice(e.target.value)} placeholder={`Minimum £${MIN_BID}`} className="pl-7 h-12 text-lg" data-testid="job-detail-quote-input" />
                 </div>
-                {quotesUsed > 0 && <p className="text-xs text-amber-600 mt-1.5">{quotesLeft > 0 ? `You have ${quotesLeft} quote${quotesLeft === 1 ? "" : "s"} left for this job.` : "You've used both your quotes for this job."}</p>}
+                {belowMin && <p className="text-xs text-red-600 mt-1.5" data-testid="min-bid-warning">Minimum quote is £{MIN_BID}. Please enter £{MIN_BID} or more.</p>}
+                {!belowMin && quotesUsed > 0 && <p className="text-xs text-amber-600 mt-1.5">{quotesLeft > 0 ? `You have ${quotesLeft} quote${quotesLeft === 1 ? "" : "s"} left for this job.` : "You've used both your quotes for this job."}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price || quotesLeft <= 0} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
+                <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price || belowMin || quotesLeft <= 0} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
                 <Button onClick={() => onChat(job.booking_id)} variant="outline" className="h-12" data-testid="job-detail-message"><Send className="h-4 w-4 mr-2" /> Message</Button>
               </div>
             </div>

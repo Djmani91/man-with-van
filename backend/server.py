@@ -54,6 +54,7 @@ INSTANT_RADIUS_MI = 5
 INSTANT_RADIUS_EXPANDED_MI = 10
 BIDDING_RADIUS_MI = 20
 FIXED_RADIUS_MI = 30
+MIN_BID = 50
 VAN_ORDER = ["small", "medium", "large", "xl"]
 
 
@@ -1670,7 +1671,7 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     for j in open_jobs:
         try:
             dist = driver_dist(prof, j)
-            if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in hide_ids:
+            if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in hide_ids and user["user_id"] not in (j.get("declined_by") or []):
                 suggested, hours = driver_job_price(prof, j, apply_congestion=False)
                 out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested,
                             "est_hours": hours, "quotes_used": requote_attempts.get(j["booking_id"], 0)})
@@ -1682,7 +1683,7 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     for j in fixed_jobs:
         try:
             dist = driver_dist(prof, j)
-            if dist <= FIXED_RADIUS_MI:
+            if dist <= FIXED_RADIUS_MI and user["user_id"] not in (j.get("declined_by") or []):
                 hours = j.get("estimated_hours") or (j.get("quote") or {}).get("estimated_hours")
                 fixed_out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "est_hours": hours, "fixed_price": True, "urgent": True})
         except Exception:
@@ -1730,6 +1731,8 @@ async def driver_bid(booking_id: str, data: BidInput, user: dict = Depends(requi
     b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     if not b or b.get("driver_id") or b.get("mode") != "bidding":
         raise HTTPException(status_code=400, detail="This job is not open for bids")
+    if float(data.price) < MIN_BID:
+        raise HTTPException(status_code=400, detail=f"Minimum quote is £{MIN_BID}. Please enter £{MIN_BID} or more.")
     now = datetime.now(timezone.utc).isoformat()
     existing = await db.bids.find_one({"booking_id": booking_id, "driver_id": user["user_id"]}, {"_id": 0})
     if existing:
@@ -1759,6 +1762,13 @@ async def driver_withdraw(booking_id: str, user: dict = Depends(require_driver))
     can_requote = attempts < 2
     return {"status": "withdrawn", "can_requote": can_requote,
             "message": "Quote withdrawn — the job is back on the quotation page." + ("" if can_requote else " You've used both your quotes for this job.")}
+
+
+@api_router.post("/driver/jobs/{booking_id}/decline")
+async def driver_decline(booking_id: str, user: dict = Depends(require_driver)):
+    await _require_approved_driver(user)
+    await db.bookings.update_one({"booking_id": booking_id}, {"$addToSet": {"declined_by": user["user_id"]}})
+    return {"status": "declined", "message": "Job declined — it won't show on your quotation page again."}
 
 
 @api_router.get("/driver/requests")
