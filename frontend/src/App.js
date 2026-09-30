@@ -11,6 +11,9 @@ import Book from "@/pages/Book";
 import Account from "@/pages/Account";
 import Track from "@/pages/Track";
 import Admin from "@/pages/Admin";
+import DriverSignup from "@/pages/DriverSignup";
+import DriverLogin from "@/pages/DriverLogin";
+import DriverDashboard from "@/pages/DriverDashboard";
 
 function Shell() {
   const location = useLocation();
@@ -20,10 +23,13 @@ function Shell() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/book" element={<ProtectedRoute><Book /></ProtectedRoute>} />
+      <Route path="/book" element={<Book />} />
       <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
       <Route path="/track/:id" element={<ProtectedRoute><Track /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute admin><Admin /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+      <Route path="/driver/signup" element={<DriverSignup />} />
+      <Route path="/driver/login" element={<DriverLogin />} />
+      <Route path="/driver" element={<ProtectedRoute role="driver"><DriverDashboard /></ProtectedRoute>} />
     </Routes>
   );
 }
