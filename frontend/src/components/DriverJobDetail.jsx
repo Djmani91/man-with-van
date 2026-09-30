@@ -33,7 +33,7 @@ function stairsWarning(job) {
 }
 
 export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, DRIVER_STEPS, LABEL }) {
-  const [price, setPrice] = useState(job.suggested_price || job.my_bid || "");
+  const [price, setPrice] = useState(job.my_bid || "");
   const dist = job.distance_mi ?? job.distance_miles;
   const hours = job.est_hours ?? job.estimated_hours;
   const warning = stairsWarning(job);

@@ -26,6 +26,13 @@ const DRIVER_STEPS = [
 ];
 const LABEL = { assigned: "Assigned", en_route_pickup: "En route", loading: "Loading", in_transit: "In transit", completed: "Completed", confirmed: "Confirmed" };
 
+function fmtCardDate(d) {
+  if (!d) return { wd: "—", day: "" };
+  const dt = new Date(d + "T00:00:00");
+  if (isNaN(dt)) return { wd: "", day: d };
+  return { wd: dt.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase(), day: dt.toLocaleDateString("en-GB", { day: "2-digit" }) };
+}
+
 export default function DriverDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -172,9 +179,7 @@ export default function DriverDashboard() {
                 {!approved ? <Empty icon={ShieldAlert} text="Available jobs unlock after approval." />
                   : filteredAvailable.length === 0 ? <Empty icon={Route} text={dayFilter === "all" ? "No open jobs right now. Check back soon." : "No open jobs on this day. Try another day."} />
                   : filteredAvailable.map((j) => (
-                    <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })}>
-                      {j.fixed_price ? <AcceptRow job={j} onAccept={acceptJob} /> : <BidRow job={j} onBid={sendQuote} />}
-                    </JobCard>
+                    <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })} />
                   ))}
               </div>
             ) : (
@@ -287,31 +292,43 @@ export default function DriverDashboard() {
   );
 }
 
-const JobCard = ({ job, children, showContact, onOpen }) => (
-  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>
-    {job.congestion_charge && (
-      <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-100 border border-amber-300 px-3 py-2" data-testid={`congestion-warning-${job.booking_id}`}>
-        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-        <p className="text-xs font-semibold text-amber-800">Congestion charge zone — Central London. Factor in the daily charge.</p>
+const JobCard = ({ job, children, showContact, onOpen }) => {
+  const amount = job.my_bid ?? job.customer_pays ?? job.price;
+  const bd = fmtCardDate(job.date);
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>
+      {job.congestion_charge && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-100 border border-amber-300 px-3 py-2" data-testid={`congestion-warning-${job.booking_id}`}>
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+          <p className="text-xs font-semibold text-amber-800">Congestion charge zone — Central London. Factor in the daily charge.</p>
+        </div>
+      )}
+      <div onClick={onOpen} className={onOpen ? "cursor-pointer" : ""} data-testid={`open-${job.booking_id}`}>
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 w-14 rounded-xl bg-violet-50 border border-violet-100 text-center py-1.5" data-testid={`job-date-${job.booking_id}`}>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-primary leading-none">{bd.wd}</p>
+            <p className="font-heading text-2xl font-bold text-slate-900 leading-tight">{bd.day}</p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-heading font-semibold text-slate-900 text-sm truncate">{job.booking_id}</span>
+              {amount != null && amount > 0 && <span className="font-heading text-lg font-bold text-primary flex items-center shrink-0"><PoundSterling className="h-4 w-4" />{amount.toFixed(0)}</span>}
+            </div>
+            <div className="mt-2 space-y-1.5 text-sm text-slate-600">
+              <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {job.pickup || job.pickup_postcode}</p>
+              <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /> {job.dropoff || job.dropoff_postcode}</p>
+              <p className="flex items-center gap-2 text-slate-500"><Calendar className="h-3.5 w-3.5 shrink-0" /> {job.time} · {job.distance_mi ?? job.distance_miles} mi</p>
+              <p className="flex items-center gap-2 text-slate-500"><Truck className="h-3.5 w-3.5 shrink-0" /> {job.van_name}</p>
+              {showContact && job.customer_phone && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
+            </div>
+          </div>
+        </div>
+        {onOpen && <p className="text-xs text-primary font-medium mt-2">Tap for full details →</p>}
       </div>
-    )}
-    <div onClick={onOpen} className={onOpen ? "cursor-pointer" : ""} data-testid={`open-${job.booking_id}`}>
-      <div className="flex items-center justify-between">
-        <span className="font-heading font-semibold text-slate-900 text-sm">{job.booking_id}</span>
-        <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{(job.my_bid ?? job.suggested_price ?? job.customer_pays ?? job.price ?? 0).toFixed(0)}</span>
-      </div>
-      <div className="mt-2 space-y-1.5 text-sm text-slate-600">
-        <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {job.pickup || job.pickup_postcode}</p>
-        <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /> {job.dropoff || job.dropoff_postcode}</p>
-        <p className="flex items-center gap-2 text-slate-500"><Calendar className="h-3.5 w-3.5 shrink-0" /> {job.date} at {job.time} · {job.distance_mi ?? job.distance_miles} mi</p>
-        <p className="flex items-center gap-2 text-slate-500"><Truck className="h-3.5 w-3.5 shrink-0" /> {job.van_name}</p>
-        {showContact && job.customer_phone && <p className="flex items-center gap-2 text-slate-500"><Phone className="h-3.5 w-3.5 shrink-0" /> {job.customer_name} · {job.customer_phone}</p>}
-      </div>
-      {onOpen && <p className="text-xs text-primary font-medium mt-2">Tap for full details →</p>}
+      {children}
     </div>
-    {children}
-  </div>
-);
+  );
+};
 
 const Empty = ({ icon: Icon, text }) => (
   <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
@@ -326,34 +343,6 @@ const Row = ({ icon: Icon, label, value }) => (
     <span className="font-medium text-slate-900">{value}</span>
   </div>
 );
-
-function AcceptRow({ job, onAccept }) {
-  return (
-    <div className="mt-3" data-testid={`accept-row-${job.booking_id}`}>
-      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 mb-2">
-        <PoundSterling className="h-4 w-4 text-emerald-600 shrink-0" />
-        <p className="text-xs font-semibold text-emerald-800">Fixed price · £{(job.customer_pays || 0).toFixed(0)} — no bidding. First to accept gets the job.</p>
-      </div>
-      <Button onClick={() => onAccept(job.booking_id)} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-1.5" data-testid={`accept-${job.booking_id}`}><CheckCircle2 className="h-4 w-4" /> Accept job (£{(job.your_earnings || 0).toFixed(2)})</Button>
-    </div>
-  );
-}
-
-function BidRow({ job, onBid }) {
-  const [price, setPrice] = useState(job.suggested_price || "");
-  return (
-    <div className="mt-3">
-      <p className="text-xs text-slate-500 mb-1.5">Suggested from your rates: £{(job.suggested_price || 0).toFixed(2)} · {job.est_hours}h · {job.distance_mi} mi</p>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
-          <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7" data-testid={`bid-input-${job.booking_id}`} />
-        </div>
-        <Button onClick={() => onBid(job.booking_id, price)} disabled={!price} className="bg-primary hover:bg-[#4C1D95] gap-1.5" data-testid={`quote-${job.booking_id}`}><Send className="h-4 w-4" /> Bid</Button>
-      </div>
-    </div>
-  );
-}
 
 const BANDS = { small: [35, 45], medium: [40, 50], large: [45, 55], xl: [50, 60] };
 const VAN_LABEL = { small: "Small", medium: "Medium", large: "Large", xl: "Luton XL" };
