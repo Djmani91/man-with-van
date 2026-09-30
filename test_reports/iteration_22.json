@@ -1,0 +1,21 @@
+{
+  "summary": "Iteration 22: verified new driver quotation flow — bid cap (max 2), withdraw & re-quote lifecycle. Backend pytest (2/2) plus a full Playwright e2e on mobile viewport all pass. Bidding job detail shows Submit+Message only (no Decline). Waiting job detail shows Withdraw+Message. Withdrawal returns the job to the open Quotation list with '1 quote left' shown. Second withdraw exhausts the job and removes it from /driver/available. Third bid attempt is blocked with 400 'maximum of 2 quotes'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_bid_cap_withdraw.py",
+    "/app/test_reports/pytest/iter22_bidcap.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Endpoint naming inconsistency: review request mentions POST /api/bookings/{id}/broadcast-bidding but the actual route is POST /api/bookings/{id}/broadcast. Consider aligning docs/spec or adding an alias — noted for main agent.",
+    "server.py is ~1792 lines; consider modularising (driver routes, booking routes, chat routes) for maintainability."
+  ],
+  "updated_files": ["/app/backend/tests/test_bid_cap_withdraw.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "drv1@example.com / Drive#2026 (approved driver); customer@example.com / Customer#2026",
+  "seed_data_creation": "Created bidding job MWVE95427B8 (M1 1AA → M20 2LN) via /api/bookings + /api/bookings/{id}/broadcast for UI e2e. Driver bids cycled fully; job ended exhausted (both quotes used and withdrawn).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Driver drv1 has no home_postcode/base_coords, so distance falls back to a hash-based simulator; seeding a bidding job may need trying several pickup postcodes to land within 20mi. Booking test MWVE95427B8 has been consumed (both quotes attempted+withdrawn) and will no longer appear on /driver/available for drv1."
+}

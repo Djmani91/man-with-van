@@ -41,6 +41,7 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
     if (!open) return;
     let cancelled = false;
     let cardInstance = null;
+    let gpEl = null, gpHandler = null;
     setReady(false); setError(""); setHasGoogle(false); setHasApple(false);
     (async () => {
       try {
@@ -61,6 +62,24 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
               await gp.attach(googleRef.current);
               googlePayRef.current = gp;
               setHasGoogle(true);
+              // attach() only renders the button — we must wire the click to tokenize().
+              let processing = false;
+              gpHandler = async (e) => {
+                e.preventDefault();
+                if (processing) return;
+                processing = true;
+                setBusy(true); setError("");
+                try {
+                  const result = await gp.tokenize();
+                  if (result.status !== "OK") throw new Error(result.errors?.[0]?.message || "Google Pay could not be completed.");
+                  await onToken(result.token);
+                } catch (err) {
+                  setError(err.message || "Google Pay failed. Please try another method.");
+                  setBusy(false);
+                } finally { processing = false; }
+              };
+              gpEl = googleRef.current;
+              gpEl.addEventListener("click", gpHandler);
             }
           } catch (e) { /* Google Pay unavailable */ }
           try {
@@ -82,12 +101,14 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
     })();
     return () => {
       cancelled = true;
+      try { if (gpEl && gpHandler) gpEl.removeEventListener("click", gpHandler); } catch { /* noop */ }
       try { cardInstance?.destroy?.(); } catch { /* noop */ }
       try { googlePayRef.current?.destroy?.(); } catch { /* noop */ }
       cardRef.current = null;
       googlePayRef.current = null;
       applePayRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, amount]);
 
   const chargeWith = async (instance) => {
@@ -106,7 +127,6 @@ export function SquarePaymentModal({ open, onOpenChange, amount, creditApplied =
   };
 
   const pay = () => chargeWith(cardRef.current);
-  const payGoogle = () => chargeWith(googlePayRef.current);
   const payApple = () => chargeWith(applePayRef.current);
 
   return (
