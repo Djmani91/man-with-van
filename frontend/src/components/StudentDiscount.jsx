@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { GraduationCap, Copy, Check, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { GraduationCap, Copy, Check, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { STUDENT_CODE, savePromo } from "@/lib/promo";
 import { toast } from "sonner";
 
 export const StudentDiscount = () => {
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
 
   const copyCode = async () => {
     try { await navigator.clipboard.writeText(STUDENT_CODE); } catch { /* noop */ }
@@ -53,7 +55,10 @@ export const StudentDiscount = () => {
               className="bg-white text-primary hover:bg-white/90 rounded-full px-7 h-12 gap-2 font-semibold">
               <GraduationCap className="h-5 w-5" /> Apply student discount
             </Button>
-            <p className="text-xs text-white/60 mt-2 text-center">Auto-fills at checkout — no typing needed</p>
+            <button onClick={() => navigate("/student-discount")} data-testid="student-learn-more"
+              className="mt-2 w-full text-center text-xs text-white/80 hover:text-white underline underline-offset-2 flex items-center justify-center gap-1">
+              See student offer &amp; FAQs <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
         </div>
       </div>

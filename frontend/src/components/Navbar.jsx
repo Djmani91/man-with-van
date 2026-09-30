@@ -12,6 +12,7 @@ const LINKS = [
   { label: "Services", href: "/#services" },
   { label: "How it works", href: "/#how" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Student Discount", href: "/student-discount" },
   { label: "Reviews", href: "/#reviews" },
   { label: "FAQ", href: "/#faq" },
 ];

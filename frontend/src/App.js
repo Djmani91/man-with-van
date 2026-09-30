@@ -18,6 +18,7 @@ import DriverLogin from "@/pages/DriverLogin";
 import DriverDashboard from "@/pages/DriverDashboard";
 import Areas from "@/pages/Areas";
 import AreaLanding from "@/pages/AreaLanding";
+import StudentDiscountPage from "@/pages/StudentDiscountPage";
 
 function Shell() {
   const location = useLocation();
@@ -27,6 +28,7 @@ function Shell() {
       <Route path="/" element={<Home />} />
       <Route path="/man-and-van" element={<Areas />} />
       <Route path="/man-and-van/:slug" element={<AreaLanding />} />
+      <Route path="/student-discount" element={<StudentDiscountPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/book" element={<Book />} />
