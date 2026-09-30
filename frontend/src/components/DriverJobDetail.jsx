@@ -153,7 +153,7 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
         {/* Notes & photos */}
         {(job.items || job.photos?.length > 0) && (
           <div>
-            <p className="flex items-center gap-2 font-heading font-bold text-primary mb-2"><FileText className="h-4 w-4" /> Customer item photos &amp; notes</p>
+            <p className="flex items-center gap-2 font-heading font-bold text-primary mb-2"><FileText className="h-4 w-4" /> Notes &amp; photo</p>
             {job.items && <p className="text-slate-700 whitespace-pre-line text-sm">{job.items}</p>}
             {job.photos?.length > 0 && (
               <div className="flex gap-2 flex-wrap mt-3" data-testid="job-detail-photos">
@@ -168,7 +168,7 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
         )}
 
         {/* Earnings breakdown */}
-        {mode !== "quotation" && (
+        {(mode !== "quotation" || job.fixed_price) && (
           <div className="border-t border-slate-200 pt-4" data-testid="earnings-breakdown">
             <p className="text-sm text-slate-500 mb-2">Earnings breakdown</p>
             <div className="flex items-center justify-between">
@@ -186,12 +186,8 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
         {mode === "quotation" && (
           job.fixed_price ? (
             <div className="border-t border-slate-200 pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-heading font-bold text-slate-900">You'll earn</span>
-                <span className="font-heading font-bold text-emerald-600">£{(job.your_earnings || 0).toFixed(2)}</span>
-              </div>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => onAccept(job.booking_id)} className="bg-emerald-600 hover:bg-emerald-700 h-12" data-testid="job-detail-accept"><CheckCircle2 className="h-4 w-4 mr-2" /> Accept job</Button>
+                <Button onClick={() => onAccept(job.booking_id)} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-accept"><CheckCircle2 className="h-4 w-4 mr-2" /> Accept job</Button>
                 <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
               </div>
             </div>
