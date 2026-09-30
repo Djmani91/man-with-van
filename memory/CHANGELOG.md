@@ -40,3 +40,19 @@
   pickup_coords), falling back to simulated for legacy records.
 - Verified: Camden->Islington 1.7mi, London->Leeds 169mi; driver NW1 8NH -> real Camden coords.
 - ACTION: GOOGLE_MAPS_API_KEY must be in PRODUCTION secrets for live geocoding/autocomplete.
+
+## 2026-06 — Wallets, admin driver manage, driver photos, logout, congestion charge
+- Payments: added Google Pay + Apple Pay buttons to SquarePaymentModal (auto-hide when
+  wallet unavailable; card always works). Apple Pay needs Square domain registration +
+  /.well-known association file before it appears. Payment labels reworded (removed
+  "Nothing to pay on the day" -> "Pay the full amount now"; deposit -> "Pay the balance on the day").
+- Booking wizard step 1: removed optional "Flat / house number & street" field.
+- Admin: "Manage" button per driver -> dialog showing the 4 uploaded photos and editing
+  name/phone/vehicle/van_size/postcode/rates/status/availability via PUT /api/admin/drivers/{id}.
+- Driver Hub: job cards now show the customer's uploaded item photos.
+- Account page: added "Log out" button (mobile customers had no logout).
+- Congestion charge: bookings/quotes get congestion_charge=True when pickup or dropoff is in
+  the Central London CCZ bounding box. Customer sees an amber note in MyJobs; driver sees a
+  yellow warning on the job card. (Flag/warning only — not added to price.)
+- Verified: iteration_13 (100% backend+frontend) for admin manage/logout/labels/flat-field;
+  curl-verified congestion detection + admin driver update.

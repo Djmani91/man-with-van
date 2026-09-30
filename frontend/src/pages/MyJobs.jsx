@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  MapPin, Star, MessageSquare, Truck, ShieldCheck, Zap, Gavel, Calendar, ArrowRight, PackageOpen, Loader2, Radio,
+  MapPin, Star, MessageSquare, Truck, ShieldCheck, Zap, Gavel, Calendar, ArrowRight, PackageOpen, Loader2, Radio, AlertTriangle,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -134,6 +134,12 @@ export default function MyJobs() {
               </div>
               <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {active.pickup} → {active.dropoff}</p>
               <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {active.date} at {active.time} · {active.van_name}</p>
+              {active.congestion_charge && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2.5" data-testid="congestion-note">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800">This move is in the <b>Central London Congestion Charge zone</b> — a daily congestion charge may apply on weekdays.</p>
+                </div>
+              )}
             </div>
 
             {/* Payment choice */}
@@ -218,6 +224,7 @@ export default function MyJobs() {
                 </div>
                 <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {b.pickup} → {b.dropoff}</p>
                 <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {b.date} at {b.time}</p>
+                {b.congestion_charge && <p className="text-xs text-amber-700 mt-1 flex items-center gap-1.5" data-testid={`congestion-${b.booking_id}`}><AlertTriangle className="h-3.5 w-3.5" /> Central London congestion charge zone</p>}
                 <div className="flex items-center justify-between mt-3">
                   <span className="font-heading text-lg font-bold text-slate-900">£{(b.price || 0).toFixed(2)}</span>
                   <div className="flex gap-2">

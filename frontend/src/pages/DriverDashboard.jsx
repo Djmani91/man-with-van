@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Package, Clock,
-  ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2,
+  ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2, AlertTriangle,
 } from "lucide-react";
 import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -162,6 +162,12 @@ export default function DriverDashboard() {
 
 const JobCard = ({ job, children, showContact }) => (
   <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>
+    {job.congestion_charge && (
+      <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-100 border border-amber-300 px-3 py-2" data-testid={`congestion-warning-${job.booking_id}`}>
+        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+        <p className="text-xs font-semibold text-amber-800">Congestion charge zone — Central London. Factor in the daily charge.</p>
+      </div>
+    )}
     <div className="flex items-center justify-between">
       <span className="font-heading font-semibold text-slate-900 text-sm">{job.booking_id}</span>
       <span className="font-heading text-lg font-bold text-primary flex items-center"><PoundSterling className="h-4 w-4" />{(job.my_bid ?? job.suggested_price ?? job.price ?? 0).toFixed(0)}</span>

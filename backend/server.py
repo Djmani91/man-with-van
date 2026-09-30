@@ -155,6 +155,17 @@ def driver_dist(profile: dict, booking: dict) -> float:
     return driver_distance_mi(profile.get("home_postcode", ""), booking.get("pickup", ""))
 
 
+# Approximate London Congestion Charge Zone bounding box.
+CONGESTION_ZONE = {"lat_min": 51.4900, "lat_max": 51.5320, "lng_min": -0.1490, "lng_max": -0.0750}
+
+
+def in_congestion_zone(coords: dict) -> bool:
+    if not coords or "lat" not in coords:
+        return False
+    z = CONGESTION_ZONE
+    return z["lat_min"] <= coords["lat"] <= z["lat_max"] and z["lng_min"] <= coords["lng"] <= z["lng_max"]
+
+
 def driver_rating(uid: str) -> float:
     return round(4.3 + _hash_float("rating", uid) * 0.7, 1)
 
@@ -607,9 +618,11 @@ async def quote(data: QuoteInput):
     pcoords = await resolve_coords(data.pickup)
     dcoords = await resolve_coords(data.dropoff)
     dist = haversine_mi(pcoords, dcoords)
-    return compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
-                         data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
-                         distance_override=dist)
+    result = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
+                           data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
+                           distance_override=dist)
+    result["congestion_charge"] = in_congestion_zone(pcoords) or in_congestion_zone(dcoords)
+    return result
 
 
 _STREETS = ["High Street", "Church Road", "Station Road", "Victoria Road", "Green Lane",
@@ -772,6 +785,7 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "customer_phone": data.customer_phone.strip(),
         "pickup": data.pickup.strip(), "pickup_flat": data.pickup_flat, "dropoff": data.dropoff.strip(),
         "pickup_coords": pcoords, "dropoff_coords": dcoords,
+        "congestion_charge": in_congestion_zone(pcoords) or in_congestion_zone(dcoords),
         "pickup_floor": data.pickup_floor, "dropoff_floor": data.dropoff_floor,
         "pickup_lift": data.pickup_lift, "dropoff_lift": data.dropoff_lift, "needs_helper": data.needs_helper,
         "heavy_items": data.heavy_items,

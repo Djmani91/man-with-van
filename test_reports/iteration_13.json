@@ -1,0 +1,27 @@
+{
+  "summary": "Verified the batch of admin/customer/driver/wizard changes. Backend: 5/5 pytest pass on PUT /api/admin/drivers/{id} (name/phone/vehicle/van_size/postcode/status/availability/pricing.rates/stairs_fee/helper_rate persist and reflect in GET /api/admin/drivers; 404 for unknown driver; 401/403 for unauthenticated). Frontend: (a) Admin Drivers tab shows 'Manage' buttons; clicking Manage opens driver-manage-dialog with all 4 photo slots (driver-photo-missing-<field> for un-uploaded); changing van size (Large), availability (Off), and rate inputs (small/medium/large/xl/stairs/helper) then clicking driver-manage-save shows 'Driver updated' toast, closes dialog, and the drivers table reflects the new Availability=Off and Vehicle=Mercedes Sprinter (persistence confirmed). (b) /account shows account-logout button labelled 'Log out'; click logs out, navigates to /login, and /api/auth/me subsequently returns 401. (c) /jobs (MyJobs) shows pay-deposit ('15% deposit' / 'Pay the balance on the day') and pay-full ('Pay in full' / 'Pay the full amount now'); the old 'Nothing to pay on the day' text is not present. (d) /book step 1 has ONLY 'Pickup address' and 'Drop-off address' — no wizard-pickup-flat testid and no 'Flat / house number & street' text anywhere. (e) Driver dashboard (Driver Hub) loads without errors for an approved driver (Quotation/Waiting/Accepted/Settings tabs render, no jobs so job-photos-<id> not asserted but code path grep-verified).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_driver_manage.py",
+    "/app/test_reports/pytest/iter13_admin_manage.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Public pages still emit repeated 401 console errors on /api/auth/me probe — carried over from prior iteration, non-blocking but worth suppressing for UX/log cleanliness.",
+    "MyJobs pay-deposit/pay-full labels wrap subtitle directly inside the <button> without a newline separator in the DOM (renders as '15% depositPay the balance on the day' when reading textContent). Visually fine due to <p> wrapping but consider a screen-reader friendly separator."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_driver_manage.py (new pytest file, 5 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin anisha91ahmed@gmail.com / MoveAdmin#2026. Created TEST customers/drivers ad-hoc via /api/auth/register and /api/auth/driver-register.",
+  "seed_data_creation": "Created ephemeral TEST_ customers, TEST_drv_* drivers, and one MyJobs booking (MWVDC4B4C73) for the pay-options screen. Approved TEST driver used for driver dashboard smoke test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Driver flow uses /driver/login (separate page) not /login; unified /login redirects customers to /jobs (MyJobs), then Account is at /account. For MyJobs pay options to render, the booking must be in 'quoting' status (post-create). Admin Drivers table currently lists 59 drivers so use data-testid^='manage-' selector. driver-manage-dialog testid confirmed; save button testid: driver-manage-save; van-size options are simple 'Small Van'/'Medium Van'/'Large Van'/'XL / Luton' (in Select). Backend pricing schema keys are 'stairs_fee' and 'helper_rate' (not stairs_fee_per_floor / helper_rate_per_hour) with clamped ranges (small 35-45, medium 40-50, large 45-55, xl 50-60, stairs 5-15, helper 15-25)."
+}
