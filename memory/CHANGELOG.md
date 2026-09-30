@@ -131,3 +131,10 @@
 - mask_message() now also redacts UK postcodes → '[address hidden]' (phone/email already → '[contact hidden]'). Contact info is always hidden so parties stay on-platform.
 - Frontend: ChatModal takes driverId prop (appends ?driver_id); MyJobs chat state is {bookingId, driverId}; DriverDashboard Message tab renders /driver/conversations.
 - Verified iteration_20.json: 100% backend + frontend; masking, per-driver threads, driver pre-acceptance conversations, round-trip replies, and legacy assigned-job history all pass.
+
+## 2026-06 — Mobile single-page booking form (web keeps wizard)
+- BookingWizard.jsx: on mobile (<640px) the booking form is now ONE scrolling page (all sections stacked, no Continue/Back, single mobile-confirm gated by allValid). Desktop (>=640px) keeps the step-by-step wizard. Detected via matchMedia; Section gains hideNum for mobile.
+- Time selection changed from native time input to a dropdown (Select) of hourly slots 8:00 AM–6:00 PM ("Pick a time").
+- Removed the "from £X/hr" price line from van cards.
+- Section titles: "When do you need the van?" and "Which van do you need?"; added coverage note under addresses ("within 20 miles of London, Oxford, Birmingham, Manchester, Liverpool, or Blackpool…").
+- Verified iteration_21.json (frontend 100%): mobile single-page + desktop wizard both correct; end-to-end mobile booking created.
