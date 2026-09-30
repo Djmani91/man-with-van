@@ -1610,14 +1610,22 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     prof = await _require_approved_driver(user)
     open_jobs = await db.bookings.find({"driver_id": None, "mode": "bidding", "status": "quoting"}, {"_id": 0}).sort("created_at", -1).to_list(200)
     my_bids = await db.bids.find({"driver_id": user["user_id"]}, {"_id": 0}).to_list(500)
-    bid_ids = {b["booking_id"] for b in my_bids}
+    # Hide jobs with a live quote, an exhausted (2x) withdrawn quote, or an accepted/declined bid.
+    hide_ids, requote_attempts = set(), {}
+    for bd in my_bids:
+        st, att = bd.get("status"), bd.get("attempts", 1)
+        if st == "waiting" or st in ("accepted", "declined") or (st == "withdrawn" and att >= 2):
+            hide_ids.add(bd["booking_id"])
+        elif st == "withdrawn":
+            requote_attempts[bd["booking_id"]] = att
     out = []
     for j in open_jobs:
         try:
             dist = driver_dist(prof, j)
-            if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
+            if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in hide_ids:
                 suggested, hours = driver_job_price(prof, j, apply_congestion=False)
-                out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
+                out.append({**driver_job_view(j, reveal=False), "distance_mi": dist, "suggested_price": suggested,
+                            "est_hours": hours, "quotes_used": requote_attempts.get(j["booking_id"], 0)})
         except Exception:
             continue
     # Fixed-price jobs (a driver cancelled) — first-come-first-served within 30 miles, no bidding.
@@ -1674,12 +1682,35 @@ async def driver_bid(booking_id: str, data: BidInput, user: dict = Depends(requi
     b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     if not b or b.get("driver_id") or b.get("mode") != "bidding":
         raise HTTPException(status_code=400, detail="This job is not open for bids")
-    if await db.bids.find_one({"booking_id": booking_id, "driver_id": user["user_id"]}):
-        raise HTTPException(status_code=400, detail="You already bid on this job")
+    now = datetime.now(timezone.utc).isoformat()
+    existing = await db.bids.find_one({"booking_id": booking_id, "driver_id": user["user_id"]}, {"_id": 0})
+    if existing:
+        if existing.get("status") == "waiting":
+            raise HTTPException(status_code=400, detail="You already have a live quote on this job. Withdraw it first to change your price.")
+        attempts = existing.get("attempts", 1)
+        if attempts >= 2:
+            raise HTTPException(status_code=400, detail="You've reached the maximum of 2 quotes for this job.")
+        await db.bids.update_one(
+            {"booking_id": booking_id, "driver_id": user["user_id"]},
+            {"$set": {"price": round(float(data.price), 2), "status": "waiting", "created_at": now}, "$inc": {"attempts": 1}})
+        return {"status": "waiting", "attempts": attempts + 1}
     await db.bids.insert_one({"id": str(uuid.uuid4()), "booking_id": booking_id, "driver_id": user["user_id"],
-                              "price": round(float(data.price), 2), "status": "waiting",
-                              "created_at": datetime.now(timezone.utc).isoformat()})
-    return {"status": "waiting"}
+                              "price": round(float(data.price), 2), "status": "waiting", "attempts": 1,
+                              "created_at": now})
+    return {"status": "waiting", "attempts": 1}
+
+
+@api_router.post("/driver/jobs/{booking_id}/withdraw")
+async def driver_withdraw(booking_id: str, user: dict = Depends(require_driver)):
+    await _require_approved_driver(user)
+    bid = await db.bids.find_one({"booking_id": booking_id, "driver_id": user["user_id"]}, {"_id": 0})
+    if not bid or bid.get("status") != "waiting":
+        raise HTTPException(status_code=400, detail="No active quote to withdraw")
+    await db.bids.update_one({"booking_id": booking_id, "driver_id": user["user_id"]}, {"$set": {"status": "withdrawn"}})
+    attempts = bid.get("attempts", 1)
+    can_requote = attempts < 2
+    return {"status": "withdrawn", "can_requote": can_requote,
+            "message": "Quote withdrawn — the job is back on the quotation page." + ("" if can_requote else " You've used both your quotes for this job.")}
 
 
 @api_router.get("/driver/requests")
@@ -1689,7 +1720,7 @@ async def driver_requests(user: dict = Depends(require_driver)):
     for r in bids:
         b = await db.bookings.find_one({"booking_id": r["booking_id"]}, {"_id": 0})
         if b and not b.get("driver_id"):
-            out.append(driver_job_view({**b, "my_bid": r["price"]}, reveal=False))
+            out.append(driver_job_view({**b, "my_bid": r["price"], "quotes_used": r.get("attempts", 1)}, reveal=False))
     return out
 
 

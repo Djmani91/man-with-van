@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   ArrowLeft, Navigation, MapPin, Clock, Calendar, Users, ArrowUpDown, Building2,
-  AlertCircle, FileText, Wallet, Send, CheckCircle2, Phone, AlertTriangle,
+  AlertCircle, FileText, Wallet, Send, CheckCircle2, Phone, AlertTriangle, X,
 } from "lucide-react";
 import { API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,10 @@ function stairsWarning(job) {
   return null;
 }
 
-export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, DRIVER_STEPS, LABEL }) {
+export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, onWithdraw, DRIVER_STEPS, LABEL }) {
   const [price, setPrice] = useState(job.my_bid || "");
+  const quotesUsed = job.quotes_used || 0;
+  const quotesLeft = Math.max(0, 2 - quotesUsed);
   const dist = job.distance_mi ?? job.distance_miles;
   const hours = job.est_hours ?? job.estimated_hours;
   const warning = stairsWarning(job);
@@ -199,17 +201,25 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">£</span>
                   <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="pl-7 h-12 text-lg" data-testid="job-detail-quote-input" />
                 </div>
+                {quotesUsed > 0 && <p className="text-xs text-amber-600 mt-1.5">{quotesLeft > 0 ? `You have ${quotesLeft} quote${quotesLeft === 1 ? "" : "s"} left for this job.` : "You've used both your quotes for this job."}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
-                <Button onClick={onClose} variant="outline" className="h-12" data-testid="job-detail-decline">Decline</Button>
+                <Button onClick={() => { onBid(job.booking_id, price); onClose(); }} disabled={!price || quotesLeft <= 0} className="bg-primary hover:bg-[#4C1D95] h-12" data-testid="job-detail-submit-quote"><Send className="h-4 w-4 mr-2" /> Submit quote</Button>
+                <Button onClick={() => onChat(job.booking_id)} variant="outline" className="h-12" data-testid="job-detail-message"><Send className="h-4 w-4 mr-2" /> Message</Button>
               </div>
             </div>
           )
         )}
 
         {mode === "waiting" && (
-          <div className="border-t border-slate-200 pt-4 flex items-center gap-2 text-amber-600 font-medium"><Clock className="h-4 w-4" /> Waiting for the customer to confirm your quote</div>
+          <div className="border-t border-slate-200 pt-4 space-y-3">
+            <div className="flex items-center gap-2 text-amber-600 font-medium"><Clock className="h-4 w-4" /> Waiting for the customer to confirm your quote</div>
+            {quotesUsed >= 2 && <p className="text-xs text-slate-500">You've used both your quotes for this job — if you withdraw, you won't be able to re-quote.</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <Button onClick={() => onWithdraw(job.booking_id)} variant="outline" className="h-12 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" data-testid="job-detail-withdraw"><X className="h-4 w-4 mr-2" /> Withdraw quote</Button>
+              <Button onClick={() => onChat(job.booking_id)} variant="outline" className="h-12" data-testid="job-detail-message"><Send className="h-4 w-4 mr-2" /> Message</Button>
+            </div>
+          </div>
         )}
 
         {mode === "accepted" && (
