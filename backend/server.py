@@ -52,6 +52,7 @@ EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/
 INSTANT_RADIUS_MI = 5
 BIDDING_RADIUS_MI = 30
 DEPOSIT_PCT = 0.15
+PROMO_CODES = {"STUDENT10": {"pct": 0.10, "label": "Student 10% off"}}
 
 # ---------------------------------------------------------------------------
 # Van pricing + thresholds
@@ -317,6 +318,7 @@ class BookingInput(BaseModel):
     customer_name: str
     customer_phone: str
     notes: Optional[str] = None
+    promo_code: Optional[str] = None
 
 
 class DriverInput(BaseModel):
@@ -467,6 +469,14 @@ async def pricing_bounds():
             "helper_rate": {"min": HELPER_MIN, "max": HELPER_MAX}}
 
 
+@api_router.get("/promo/{code}")
+async def validate_promo(code: str):
+    promo = PROMO_CODES.get(code.strip().upper())
+    if not promo:
+        return {"valid": False}
+    return {"valid": True, "code": code.strip().upper(), "discount_pct": promo["pct"], "label": promo["label"]}
+
+
 @api_router.post("/quote")
 async def quote(data: QuoteInput):
     return compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
@@ -542,6 +552,8 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
     q = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
                       data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift)
     now = datetime.now(timezone.utc).isoformat()
+    promo_code = (data.promo_code or "").strip().upper()
+    promo = PROMO_CODES.get(promo_code)
     booking = {
         "booking_id": f"MWV{uuid.uuid4().hex[:8].upper()}", "user_id": user["user_id"],
         "customer_name": data.customer_name.strip(), "customer_email": user["email"],
@@ -554,6 +566,8 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "van_size": data.van_size, "van_name": q["van_name"], "distance_miles": q["distance_miles"],
         "estimated_hours": q["estimated_hours"], "date": data.date, "time": data.time, "notes": data.notes,
         "quote": q, "price": None, "currency": "GBP",
+        "promo_code": promo_code if promo else None,
+        "promo_discount_pct": promo["pct"] if promo else 0.0,
         "mode": None, "status": "quoting",
         "driver_id": None, "driver": None,
         "payment": {"status": "unpaid", "type": None, "amount": 0.0, "deposit": 0.0},
@@ -727,6 +741,11 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
 
     if payment_type not in ("deposit", "full"):
         raise HTTPException(status_code=400, detail="Invalid payment type")
+    promo_code = b.get("promo_code")
+    promo_pct = b.get("promo_discount_pct") or 0.0
+    original_price = round(price, 2)
+    discount_amount = round(original_price * promo_pct, 2) if promo_pct else 0.0
+    price = round(original_price - discount_amount, 2)
     deposit = round(price * DEPOSIT_PCT, 2)
     amount = deposit if payment_type == "deposit" else price
     square_payment_id = await _charge_square(amount, booking_id, payment_type, source_id)
@@ -740,7 +759,8 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
         "price": price, "status": "assigned",
         "payment": {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
                     "balance_due": round(price - amount, 2), "paid_at": now,
-                    "transaction_id": square_payment_id, "provider": "square"},
+                    "transaction_id": square_payment_id, "provider": "square",
+                    "original_price": original_price, "promo_code": promo_code, "discount": discount_amount},
         "timeline": timeline, "mode": b.get("mode") or "instant",
     }})
     await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})

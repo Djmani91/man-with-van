@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { getPromo, loadPromo, savePromo } from "@/lib/promo";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -25,7 +26,7 @@ const blank = {
   pickup: "", pickup_flat: "", dropoff: "",
   pickup_floor: 0, pickup_lift: true, dropoff_floor: 0, dropoff_lift: true,
   date: "", time: "", van_size: "",
-  items: "", photos: [], customer_name: "", customer_phone: "", notes: "",
+  items: "", photos: [], customer_name: "", customer_phone: "", notes: "", promo_code: "",
 };
 
 export const BookingWizard = ({ compact = true }) => {
@@ -46,6 +47,17 @@ export const BookingWizard = ({ compact = true }) => {
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Pre-fill a promo saved by the student-discount widget (once, if the form has none).
+  useEffect(() => {
+    const saved = loadPromo();
+    if (saved && !form.promo_code) set("promo_code", saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const promo = getPromo(form.promo_code);
+  const discountAmount = promo && quote ? +(quote.total * promo.pct).toFixed(2) : 0;
+  const discountedTotal = quote ? +(quote.total - discountAmount).toFixed(2) : 0;
 
   useEffect(() => {
     api.get("/vansizes").then(({ data }) => setVans(data)).catch(() => {});
@@ -248,6 +260,15 @@ export const BookingWizard = ({ compact = true }) => {
                   <div className="space-y-2"><Label>Full name</Label><Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} placeholder="Jane Smith" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-name" /></div>
                   <div className="space-y-2"><Label>Phone number</Label><Input value={form.customer_phone} onChange={(e) => set("customer_phone", e.target.value)} placeholder="07123 456789" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-phone" /></div>
                   <div className="space-y-2"><Label>Notes <span className="text-slate-400 font-normal">(optional)</span></Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="e.g. Parking is tight; call on arrival" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-notes" /></div>
+                  <div className="space-y-2">
+                    <Label>Promo code <span className="text-slate-400 font-normal">(optional)</span></Label>
+                    <Input value={form.promo_code}
+                      onChange={(e) => { const v = e.target.value.toUpperCase(); set("promo_code", v); if (getPromo(v)) savePromo(v); }}
+                      placeholder="e.g. STUDENT10" className="focus:ring-2 focus:ring-violet-500 uppercase" data-testid="wizard-promo" />
+                    {form.promo_code && (promo
+                      ? <p className="text-xs font-medium text-emerald-600 flex items-center gap-1" data-testid="wizard-promo-valid"><Check className="h-3.5 w-3.5" /> {promo.label} applied — {Math.round(promo.pct * 100)}% off your total</p>
+                      : <p className="text-xs text-slate-400" data-testid="wizard-promo-invalid">Enter a valid code to get a discount.</p>)}
+                  </div>
                 </div>
               </Section>
             )}
@@ -257,9 +278,24 @@ export const BookingWizard = ({ compact = true }) => {
 
       {/* Live price */}
       {quote && (
-        <div className="flex items-center justify-between bg-violet-50 rounded-xl px-4 py-3 mt-2" data-testid="wizard-price">
-          <span className="text-sm text-slate-600">Estimated fixed price · {quote.distance_miles} mi</span>
-          <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{quote.total.toFixed(2)}</span>
+        <div className="bg-violet-50 rounded-xl px-4 py-3 mt-2" data-testid="wizard-price">
+          {promo ? (
+            <>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500 line-through">£{quote.total.toFixed(2)}</span>
+                <span className="text-emerald-600 font-semibold" data-testid="wizard-discount">− £{discountAmount.toFixed(2)} ({promo.label})</span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-sm text-slate-600">Your price · {quote.distance_miles} mi</span>
+                <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{discountedTotal.toFixed(2)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Estimated fixed price · {quote.distance_miles} mi</span>
+              <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{quote.total.toFixed(2)}</span>
+            </div>
+          )}
         </div>
       )}
 

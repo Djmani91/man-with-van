@@ -11,6 +11,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Seo } from "@/components/Seo";
 import { BookingWizard } from "@/components/BookingWizard";
+import { StudentDiscount } from "@/components/StudentDiscount";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -152,6 +153,8 @@ export default function Home() {
       </section>
 
       {/* CUSTOMER / DRIVER SPLIT */}
+      <StudentDiscount />
+
       <section className="max-w-7xl mx-auto px-5 sm:px-8 py-8 grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Customers</p>

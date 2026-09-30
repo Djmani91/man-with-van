@@ -41,6 +41,8 @@ export default function MyJobs() {
   useEffect(() => { load().catch(() => setBookings([])); }, [load]);
 
   const active = bookings?.find((b) => b.status === "quoting");
+  const promoPct = active?.promo_discount_pct || 0;
+  const promoCode = active?.promo_code;
 
   const loadOffers = useCallback(async (id) => {
     try { const { data } = await api.get(`/bookings/${id}/instant-offers`); setOffers(data); } catch { setOffers({ offers: [] }); }
@@ -68,7 +70,10 @@ export default function MyJobs() {
     setPayFor({ driverId, price });
   };
 
-  const payAmount = payFor ? (payType === "deposit" ? payFor.price * 0.15 : payFor.price) : 0;
+  const payAmount = payFor ? (() => {
+    const eff = payFor.price * (1 - promoPct);
+    return payType === "deposit" ? eff * 0.15 : eff;
+  })() : 0;
 
   const handleToken = async (sourceId) => {
     if (!payFor || !active) return;
@@ -128,6 +133,12 @@ export default function MyJobs() {
                 <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
                 <div><p className="text-sm font-semibold text-slate-900">Refund guarantee</p><p className="text-xs text-slate-600">Cancel at least 6 hours before your scheduled time for a full refund.</p></div>
               </div>
+              {promoCode && (
+                <div className="mt-3 rounded-xl bg-violet-50 border border-violet-200 p-3 flex items-center gap-2" data-testid="promo-applied-banner">
+                  <span className="text-xs font-bold uppercase tracking-wide bg-primary text-white px-2 py-1 rounded">{promoCode}</span>
+                  <p className="text-sm text-slate-700 font-medium">{Math.round(promoPct * 100)}% student discount applied — prices below already include it.</p>
+                </div>
+              )}
             </div>
 
             {/* Mode toggle */}
@@ -145,7 +156,7 @@ export default function MyJobs() {
             {/* Offers list */}
             {mode === "instant" ? (
               <OfferList offers={offers?.offers} loading={offers === null} note={offers && !offers.exact_radius ? "Nearest drivers (just outside 5 miles)" : `Drivers within ${offers?.radius_mi || 5} miles`}
-                onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} />
+                onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -154,7 +165,7 @@ export default function MyJobs() {
                 </div>
                 {bids.length === 0
                   ? <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400" data-testid="no-bids">Bids will appear here as drivers respond — this can take a little while.</div>
-                  : <OfferList offers={bids} onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} />}
+                  : <OfferList offers={bids} onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />}
               </div>
             )}
           </div>
@@ -209,7 +220,7 @@ export default function MyJobs() {
   );
 }
 
-function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepting, payType }) {
+function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepting, payType, promoPct = 0 }) {
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   if (!offers || offers.length === 0) return <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400" data-testid="no-offers">No drivers available right now. Try bidding to reach more drivers.</div>;
   return (
@@ -222,7 +233,9 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold text-slate-900 truncate">{o.name}</p>
-                <span className="font-heading text-xl font-bold text-slate-900 shrink-0">£{o.price.toFixed(2)}</span>
+                {promoPct > 0
+                  ? <span className="shrink-0 text-right"><span className="text-sm text-slate-400 line-through mr-1.5">£{o.price.toFixed(2)}</span><span className="font-heading text-xl font-bold text-slate-900">£{(o.price * (1 - promoPct)).toFixed(2)}</span></span>
+                  : <span className="font-heading text-xl font-bold text-slate-900 shrink-0">£{o.price.toFixed(2)}</span>}
               </div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {o.tags?.includes("closest") && <Badge className="bg-emerald-100 text-emerald-700 border-0 gap-1"><MapPin className="h-3 w-3" /> Closest</Badge>}
@@ -236,7 +249,7 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
           <div className="grid grid-cols-2 gap-3 mt-3">
             <Button variant="outline" onClick={() => onChat && onChatUnavailable()} disabled className="gap-1.5 opacity-60" title="Chat opens after you accept" data-testid={`offer-msg-${o.driver_id}`}><MessageSquare className="h-4 w-4" /> Message</Button>
             <Button onClick={() => onAccept(o.driver_id, o.price)} disabled={accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
-              {accepting === o.driver_id ? "Processing…" : `Accept — £${(payType === "deposit" ? o.price * 0.15 : o.price).toFixed(2)}`}
+              {accepting === o.driver_id ? "Processing…" : `Accept — £${((payType === "deposit" ? o.price * 0.15 : o.price) * (1 - promoPct)).toFixed(2)}`}
             </Button>
           </div>
         </div>
