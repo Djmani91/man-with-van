@@ -87,3 +87,7 @@ Moving/removals booking platform. Customers get an instant quote, book a local v
 ## Update 2026-06 (fork) — Expanded Q&A on area pages for AI/SEO
 - Each /man-and-van/:slug area page FAQ expanded from 6 to 12 local, AI-style questions (cost, "man and van near me", same-day, how many people/crew, van size for 1-4 bed, parking/congestion/ULEZ, single item/sofa, house/flat/office/student, nearby areas, how far ahead to book, evenings/weekends, insured + minimum charge). Answers are quotable + keyword-rich, injected with area name/postcodes/borough/landmarks/nearby.
 - Areas index /man-and-van now has a 6-question London man & van FAQ. Both use FAQPage JSON-LD (via Seo jsonLd). Student page already had 12 Q&As. Content-only change, compiles clean.
+
+## Update 2026-06 (fork) — Admin driver email + 4-image driver docs
+- Admin bug fix: /api/admin/drivers now joins email from users; Admin Drivers tab has Email column + search box (name/email/phone/vehicle). Verified iteration_7.
+- Driver registration now collects 4 images: profile_photo, van_photo, licence_photo, insurance_photo (added van_photo). Web /driver/signup requires all 4, uploads after register (cookie auth) → /driver/documents. Admin shows docs X/4. Driver Hub → Settings uploader includes van photo. Verified iteration_8 (100%).
