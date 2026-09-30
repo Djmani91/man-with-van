@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling, Clock,
+  Truck, LogOut, MapPin, Calendar, Phone, CheckCircle2, PoundSterling,
   ShieldCheck, ShieldAlert, Send, Hourglass, FileCheck2, Route, Loader2, AlertTriangle,
+  MessageSquare, Settings, ClipboardList,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -14,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
@@ -35,6 +35,9 @@ export default function DriverDashboard() {
   const [accepted, setAccepted] = useState([]);
   const [chat, setChat] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [tab, setTab] = useState("quotation");
+  const [qsub, setQsub] = useState("open");
+  const [dayFilter, setDayFilter] = useState("all");
 
   const approved = profile?.status === "approved";
 
@@ -86,6 +89,29 @@ export default function DriverDashboard() {
 
   const activeAccepted = accepted.filter((j) => j.status !== "completed" && j.status !== "cancelled");
 
+  const dayOptions = useMemo(() => {
+    const arr = [{ key: "all", top: "All", bot: "" }];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() + i);
+      arr.push({
+        key: d.toISOString().split("T")[0],
+        top: d.toLocaleDateString("en-GB", { weekday: "short" }),
+        bot: d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      });
+    }
+    return arr;
+  }, []);
+  const byDay = (list) => (dayFilter === "all" ? list : list.filter((j) => j.date === dayFilter));
+  const filteredAvailable = byDay(available);
+  const filteredWaiting = byDay(waiting);
+
+  const NAV = [
+    { v: "quotation", l: "Quotation", icon: ClipboardList, badge: available.length },
+    { v: "accepted", l: "Accepted", icon: CheckCircle2, badge: activeAccepted.length },
+    { v: "message", l: "Message", icon: MessageSquare, badge: 0 },
+    { v: "settings", l: "Settings", icon: Settings, badge: 0 },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-100">
       <Seo title="Driver Hub — Man With Van" path="/driver" noindex />
@@ -100,7 +126,7 @@ export default function DriverDashboard() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-5">
+      <div className="max-w-2xl mx-auto px-4 py-5 pb-28">
         {!approved && (
           <div className="rounded-xl p-4 mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200" data-testid="driver-pending-banner">
             <ShieldAlert className="h-6 w-6 text-amber-600 shrink-0" />
@@ -115,37 +141,58 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        <Tabs defaultValue="quotation" className="w-full">
-          <TabsList className="grid grid-cols-4 w-full" data-testid="driver-tabs">
-            <TabsTrigger value="quotation" data-testid="dtab-quotation" className="text-xs">Quotation {available.length > 0 && <span className="ml-1 text-primary font-bold">{available.length}</span>}</TabsTrigger>
-            <TabsTrigger value="waiting" data-testid="dtab-waiting" className="text-xs">Waiting {waiting.length > 0 && <span className="ml-1 text-amber-600 font-bold">{waiting.length}</span>}</TabsTrigger>
-            <TabsTrigger value="accepted" data-testid="dtab-accepted" className="text-xs">Accepted {activeAccepted.length > 0 && <span className="ml-1 text-emerald-600 font-bold">{activeAccepted.length}</span>}</TabsTrigger>
-            <TabsTrigger value="settings" data-testid="dtab-settings" className="text-xs">Settings</TabsTrigger>
-          </TabsList>
-
-          {/* QUOTATION (available jobs) */}
-          <TabsContent value="quotation" className="mt-4 space-y-3" data-testid="driver-available-list">
-            {!approved ? <Empty icon={ShieldAlert} text="Available jobs unlock after approval." />
-              : available.length === 0 ? <Empty icon={Route} text="No open jobs right now. Check back soon." />
-              : available.map((j) => (
-                <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })}>
-                  {j.fixed_price ? <AcceptRow job={j} onAccept={acceptJob} /> : <BidRow job={j} onBid={sendQuote} />}
-                </JobCard>
+        {/* QUOTATION */}
+        {tab === "quotation" && (
+          <div className="space-y-4" data-testid="driver-quotation">
+            {/* Day filter */}
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" data-testid="driver-day-filter">
+              {dayOptions.map((d) => (
+                <button key={d.key} onClick={() => setDayFilter(d.key)} data-testid={`day-${d.key}`}
+                  className={`shrink-0 rounded-xl px-3 py-2 text-center border-2 transition-all ${dayFilter === d.key ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>
+                  <p className="text-xs font-bold leading-tight">{d.top}</p>
+                  {d.bot && <p className="text-[10px] leading-tight opacity-80">{d.bot}</p>}
+                </button>
               ))}
-          </TabsContent>
+            </div>
 
-          {/* WAITING */}
-          <TabsContent value="waiting" className="mt-4 space-y-3" data-testid="driver-waiting-list">
-            {waiting.length === 0 ? <Empty icon={Hourglass} text="No quotations awaiting a decision." />
-              : waiting.map((j) => (
-                <JobCard key={j.booking_id} job={j} testid={`waiting-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "waiting" })}>
-                  <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 font-medium"><Hourglass className="h-4 w-4" /> Waiting for confirmation</div>
-                </JobCard>
-              ))}
-          </TabsContent>
+            {/* Sub tabs */}
+            <div className="grid grid-cols-2 gap-1 bg-slate-200/70 p-1 rounded-xl">
+              <button onClick={() => setQsub("open")} data-testid="qsub-open"
+                className={`rounded-lg py-2 text-sm font-semibold transition-all ${qsub === "open" ? "bg-white text-primary shadow-sm" : "text-slate-500"}`}>
+                Quotation {filteredAvailable.length > 0 && <span className="ml-1 text-primary font-bold">{filteredAvailable.length}</span>}
+              </button>
+              <button onClick={() => setQsub("waiting")} data-testid="qsub-waiting"
+                className={`rounded-lg py-2 text-sm font-semibold transition-all ${qsub === "waiting" ? "bg-white text-primary shadow-sm" : "text-slate-500"}`}>
+                Quotation accepted {filteredWaiting.length > 0 && <span className="ml-1 text-amber-600 font-bold">{filteredWaiting.length}</span>}
+              </button>
+            </div>
 
-          {/* ACCEPTED */}
-          <TabsContent value="accepted" className="mt-4 space-y-3" data-testid="driver-accepted-list">
+            {qsub === "open" ? (
+              <div className="space-y-3" data-testid="driver-available-list">
+                {!approved ? <Empty icon={ShieldAlert} text="Available jobs unlock after approval." />
+                  : filteredAvailable.length === 0 ? <Empty icon={Route} text={dayFilter === "all" ? "No open jobs right now. Check back soon." : "No open jobs on this day. Try another day."} />
+                  : filteredAvailable.map((j) => (
+                    <JobCard key={j.booking_id} job={j} testid={`available-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "quotation" })}>
+                      {j.fixed_price ? <AcceptRow job={j} onAccept={acceptJob} /> : <BidRow job={j} onBid={sendQuote} />}
+                    </JobCard>
+                  ))}
+              </div>
+            ) : (
+              <div className="space-y-3" data-testid="driver-waiting-list">
+                {filteredWaiting.length === 0 ? <Empty icon={Hourglass} text={dayFilter === "all" ? "No quotations awaiting a decision." : "No pending quotes on this day."} />
+                  : filteredWaiting.map((j) => (
+                    <JobCard key={j.booking_id} job={j} testid={`waiting-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "waiting" })}>
+                      <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 font-medium"><Hourglass className="h-4 w-4" /> Waiting for confirmation</div>
+                    </JobCard>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ACCEPTED */}
+        {tab === "accepted" && (
+          <div className="space-y-3" data-testid="driver-accepted-list">
             {activeAccepted.length === 0 ? <Empty icon={CheckCircle2} text="No accepted jobs yet." />
               : activeAccepted.map((j) => (
                 <JobCard key={j.booking_id} job={j} showContact testid={`accepted-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "accepted" })}>
@@ -159,10 +206,36 @@ export default function DriverDashboard() {
                   <Button variant="outline" size="sm" onClick={() => setChat(j.booking_id)} className="mt-2 w-full gap-1.5" data-testid={`driver-chat-${j.booking_id}`}><Send className="h-3.5 w-3.5" /> Message customer</Button>
                 </JobCard>
               ))}
-          </TabsContent>
+          </div>
+        )}
 
-          {/* SETTINGS */}
-          <TabsContent value="settings" className="mt-4" data-testid="driver-settings">
+        {/* MESSAGE */}
+        {tab === "message" && (
+          <div className="space-y-3" data-testid="driver-message-list">
+            {accepted.length === 0 ? <Empty icon={MessageSquare} text="No conversations yet. Chats appear once you have an accepted job." />
+              : accepted.map((j) => (
+                <button key={j.booking_id} onClick={() => setChat(j.booking_id)} data-testid={`conversation-${j.booking_id}`}
+                  className="w-full text-left bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3 hover:border-violet-300 transition-colors">
+                  <div className="h-11 w-11 rounded-full bg-violet-100 text-primary font-bold flex items-center justify-center shrink-0">
+                    {(j.customer_name || "?").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-slate-900 truncate">{j.customer_name || "Customer"}</p>
+                      <span className="text-xs text-slate-400 shrink-0">{j.booking_id}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 truncate">{(j.pickup || j.pickup_postcode)} → {(j.dropoff || j.dropoff_postcode)}</p>
+                    <p className="text-xs text-slate-400">{j.date} · {LABEL[j.status] || j.status}</p>
+                  </div>
+                  <MessageSquare className="h-5 w-5 text-primary shrink-0" />
+                </button>
+              ))}
+          </div>
+        )}
+
+        {/* SETTINGS */}
+        {tab === "settings" && (
+          <div data-testid="driver-settings">
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div><p className="font-semibold text-slate-900">{profile?.name}</p><p className="text-sm text-slate-500">{user?.email}</p></div>
@@ -179,9 +252,28 @@ export default function DriverDashboard() {
               <PricingEditor profile={profile} onSaved={load} />
               <DocumentsUploader profile={profile} onSaved={load} />
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
+
+      {/* Bottom navigation */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200" data-testid="driver-bottom-nav">
+        <div className="max-w-2xl mx-auto grid grid-cols-4">
+          {NAV.map((n) => {
+            const Icon = n.icon;
+            const isActive = tab === n.v;
+            return (
+              <button key={n.v} onClick={() => setTab(n.v)} data-testid={`dnav-${n.v}`}
+                className={`relative flex flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors ${isActive ? "text-primary" : "text-slate-400"}`}>
+                <Icon className="h-5 w-5" />
+                {n.l}
+                {n.badge > 0 && <span className="absolute top-1.5 right-1/2 translate-x-4 h-4 min-w-4 px-1 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">{n.badge}</span>}
+                {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
       {chat && <ChatModal bookingId={chat} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="driver" />}
       {detail && (
         <DriverJobDetail

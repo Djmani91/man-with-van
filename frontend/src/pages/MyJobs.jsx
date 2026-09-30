@@ -22,7 +22,7 @@ export default function MyJobs() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(null);
-  const [payType, setPayType] = useState("deposit");
+  const [payType, setPayType] = useState(null);
   const [offers, setOffers] = useState(null);
   const [bids, setBids] = useState([]);
   const [mode, setMode] = useState("instant");
@@ -80,6 +80,7 @@ export default function MyJobs() {
       finally { setAccepting(null); }
       return;
     }
+    if (!payType) { toast.info("Please choose how to pay (15% deposit or full) first"); return; }
     setPayFor({ driverId, price });
   };
 
@@ -285,8 +286,8 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
           </div>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <Button variant="outline" onClick={() => onChat && onChatUnavailable()} disabled className="gap-1.5 opacity-60" title="Chat opens after you accept" data-testid={`offer-msg-${o.driver_id}`}><MessageSquare className="h-4 w-4" /> Message</Button>
-            <Button onClick={() => onAccept(o.driver_id, o.price)} disabled={accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
-              {accepting === o.driver_id ? "Processing…" : `Accept — £${((payType === "deposit" ? o.price * 0.15 : o.price) * (1 - promoPct)).toFixed(2)}`}
+            <Button onClick={() => onAccept(o.driver_id, o.price)} disabled={!payType || accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
+              {accepting === o.driver_id ? "Processing…" : !payType ? "Choose payment first" : `Accept — £${((payType === "deposit" ? o.price * 0.15 : o.price) * (1 - promoPct)).toFixed(2)}`}
             </Button>
           </div>
         </div>
