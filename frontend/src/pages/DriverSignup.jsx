@@ -19,15 +19,21 @@ export default function DriverSignup() {
 
   const submit = async (e) => {
     e.preventDefault();
-    setBusy(true); setError("");
+    setError("");
+    const required = { name: "Full name", phone: "Phone", email: "Email", password: "Password", vehicle: "Vehicle", home_postcode: "Home base postcode", licence_no: "Licence number", insurance_no: "Insurance policy no." };
+    const missing = Object.entries(required).filter(([k]) => !String(form[k] || "").trim()).map(([, label]) => label);
+    if (missing.length) { setError(`Please fill: ${missing.join(", ")}`); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    if (String(form.password).length < 6) { setError("Password must be at least 6 characters."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const num = (v, min) => { const n = Number(v); return Number.isFinite(n) ? n : min; };
+    setBusy(true);
     try {
       const payload = {
-        name: form.name, email: form.email, phone: form.phone, password: form.password,
-        vehicle: form.vehicle, licence_no: form.licence_no, insurance_no: form.insurance_no,
-        mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode,
+        name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password,
+        vehicle: form.vehicle.trim(), licence_no: form.licence_no.trim(), insurance_no: form.insurance_no.trim(),
+        mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode.trim(),
         pricing: {
-          rates: { small: Number(form.rate_small), medium: Number(form.rate_medium), large: Number(form.rate_large), xl: Number(form.rate_xl) },
-          stairs_fee: Number(form.stairs_fee), helper_rate: Number(form.helper_rate),
+          rates: { small: num(form.rate_small, 35), medium: num(form.rate_medium, 40), large: num(form.rate_large, 45), xl: num(form.rate_xl, 50) },
+          stairs_fee: num(form.stairs_fee, 5), helper_rate: num(form.helper_rate, 15),
         },
       };
       const { data } = await api.post("/auth/driver-register", payload);
@@ -35,7 +41,8 @@ export default function DriverSignup() {
       toast.success("Application submitted! Awaiting approval.");
       navigate("/driver", { replace: true });
     } catch (err) {
-      setError(formatApiError(err.response?.data?.detail) || err.message);
+      setError(formatApiError(err.response?.data?.detail) || "Could not submit — please try again.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally { setBusy(false); }
   };
 
@@ -50,19 +57,19 @@ export default function DriverSignup() {
         </div>
         <p className="text-slate-500 mb-8">Pick the local jobs that suit you and get paid. Approval is quick once your documents check out.</p>
 
-        <form onSubmit={submit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4" data-testid="driver-signup-form">
+        <form onSubmit={submit} noValidate className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4" data-testid="driver-signup-form">
           {error && <div className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2" data-testid="driver-signup-error">{error}</div>}
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Full name</Label><Input required value={form.name} onChange={set("name")} data-testid="ds-name" /></div>
-            <div className="space-y-2"><Label>Phone</Label><Input required value={form.phone} onChange={set("phone")} data-testid="ds-phone" placeholder="07123 456789" /></div>
+            <div className="space-y-2"><Label>Full name</Label><Input value={form.name} onChange={set("name")} data-testid="ds-name" /></div>
+            <div className="space-y-2"><Label>Phone</Label><Input value={form.phone} onChange={set("phone")} data-testid="ds-phone" placeholder="07123 456789" /></div>
           </div>
-          <div className="space-y-2"><Label>Email</Label><Input type="email" required value={form.email} onChange={set("email")} data-testid="ds-email" /></div>
-          <div className="space-y-2"><Label>Password</Label><Input type="password" required minLength={6} value={form.password} onChange={set("password")} data-testid="ds-password" /></div>
-          <div className="space-y-2"><Label>Vehicle</Label><Input required value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="ds-vehicle" /></div>
-          <div className="space-y-2"><Label>Home base postcode</Label><Input required value={form.home_postcode} onChange={set("home_postcode")} placeholder="e.g. M1 1AA — used to find jobs near you" data-testid="ds-home" /></div>
+          <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} data-testid="ds-email" /></div>
+          <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={set("password")} data-testid="ds-password" /></div>
+          <div className="space-y-2"><Label>Vehicle</Label><Input value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="ds-vehicle" /></div>
+          <div className="space-y-2"><Label>Home base postcode</Label><Input value={form.home_postcode} onChange={set("home_postcode")} placeholder="e.g. M1 1AA — used to find jobs near you" data-testid="ds-home" /></div>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Licence number</Label><Input required value={form.licence_no} onChange={set("licence_no")} data-testid="ds-licence" /></div>
-            <div className="space-y-2"><Label>Insurance policy no.</Label><Input required value={form.insurance_no} onChange={set("insurance_no")} data-testid="ds-insurance" /></div>
+            <div className="space-y-2"><Label>Licence number</Label><Input value={form.licence_no} onChange={set("licence_no")} data-testid="ds-licence" /></div>
+            <div className="space-y-2"><Label>Insurance policy no.</Label><Input value={form.insurance_no} onChange={set("insurance_no")} data-testid="ds-insurance" /></div>
           </div>
           <div className="space-y-2"><Label>MOT expiry <span className="text-slate-400 font-normal">(optional)</span></Label><Input type="date" value={form.mot_expiry} onChange={set("mot_expiry")} data-testid="ds-mot" /></div>
 
