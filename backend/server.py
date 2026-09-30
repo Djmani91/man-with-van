@@ -701,6 +701,32 @@ async def send_telegram_job_alert(booking: dict):
         logger.warning(f"Telegram alert failed: {e}")
 
 
+async def send_telegram_payment_alert(booking: dict, payment: dict):
+    """Send-only Telegram alert when a customer pays. No-op until token + chat id are set."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    def esc(v):
+        return html.escape(str(v if v is not None else "—"))
+
+    ptype = "Deposit" if payment.get("type") == "deposit" else "Full payment"
+    paid_now = payment.get("card_charged", payment.get("amount", 0)) or 0
+    text = (
+        f"💷 <b>Payment received — {esc(ptype)}</b>\n"
+        f"Job: <b>{esc(booking.get('booking_id'))}</b>\n"
+        f"Paid now: <b>£{paid_now:.2f}</b>\n"
+        f"Total job: £{(booking.get('price') or 0):.2f}\n"
+        f"👤 {esc(booking.get('customer_name'))}\n"
+        f"🚚 Driver: {esc((booking.get('driver') or {}).get('name'))}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                              json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"})
+    except Exception as e:
+        logger.warning(f"Telegram payment alert failed: {e}")
+
+
 def _mock_suggest(q: str) -> list:
     seed = q.upper().replace(" ", "")
     out = []
@@ -1090,6 +1116,8 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
     await db.bids.update_many({"booking_id": booking_id, "driver_id": driver_id}, {"$set": {"status": "accepted"}})
     await db.bids.update_many({"booking_id": booking_id, "driver_id": {"$ne": driver_id}}, {"$set": {"status": "declined"}})
     updated = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not already_paid:
+        await send_telegram_payment_alert(updated, payment)
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()), "driver_id": driver_id, "booking_id": booking_id, "type": "job_won",
         "title": "You've got the job!", "body": f"{updated['pickup']} → {updated['dropoff']} · £{price:.2f}",

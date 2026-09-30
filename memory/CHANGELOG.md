@@ -64,3 +64,9 @@
 - Configured in preview .env: bot @Manwithvan2bot, personal chat (Rizwan, id 5811928111).
 - Verified: direct sendMessage ok + booking-triggered alert delivered.
 - ACTION: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to production (carried on next deploy).
+
+## 2026-06 — Telegram payment alerts
+- send_telegram_payment_alert(booking, payment) added; fires inside _assign_and_pay only when
+  a real charge occurs (not on reassignment/already-paid). Shows deposit vs full, amount paid
+  now, total, customer, driver. Send-only, failure-safe.
+- Verified: sample payment alert delivered to chat 5811928111.
