@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only verification of the two BookingWizard changes: (1) estimated-price block removed, (2) Step 2 (Floors & access) now requires an active pickup floor + pickup access + dropoff floor + dropoff access before Continue enables. Also validated end-to-end booking creation and backend persistence of chosen floors/lift values.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_performed": {
+    "no_price_at_every_step": "PASS — walked all 6 steps (Addresses, Floors, Date&Time, Van, Photos&Items, Contact). [data-testid=wizard-price] and [data-testid=wizard-total] counts = 0 on every step. No 'Estimated fixed price' / 'Estimated total' text matched anywhere.",
+    "floors_gating_step2": "PASS — Continue button disabled state observed as: nothing selected -> disabled=True; only pickup floor -> disabled=True; pickup floor + pickup lift -> disabled=True; + dropoff floor (3 of 4) -> disabled=True; all four chosen -> disabled=False.",
+    "full_booking_flow": "PASS — completed all steps with addresses (SW1A/E16 2FR via option-0 suggestions), floors (Ground+Lift for pickup, 1st+Stairs for dropoff), date+time, first van, items text + 1 photo upload via wizard-photo-input, name/phone/notes. wizard-confirm succeeded — success toast 'Booking created — now choose your driver.' shown, navigated to /jobs.",
+    "backend_persistence": "PASS — GET /api/bookings for the customer returned the newly-created booking with pickup_floor=0, dropoff_floor=1, pickup_lift=true, dropoff_lift=false — exactly what was selected in the wizard."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: GET /api/bookings response has id=null for the latest booking in the returned list (see backend persistence check output). Not part of this iteration's scope but worth verifying that /api/bookings serialisation always returns the booking id — some downstream flows (driver assignment, tracking) may rely on it.",
+    "BookingWizard.jsx is ~390 lines — still manageable, but the inline auth Dialog + FloorPicker could be extracted into their own files for readability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100%"},
+  "test_credentials": "customer@example.com / Customer#2026 (already existed)",
+  "seed_data_creation": "One booking created via the wizard (SW1A 1AA -> E16 2FR, Small Van, date=today+3, 10:00) as part of end-to-end verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both booking-wizard requirements from this iteration are verified working. Watch out for the id=null observation in GET /api/bookings if you touch booking serialisation."
+}

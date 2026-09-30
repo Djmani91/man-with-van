@@ -103,3 +103,9 @@
 - BookingWizard.jsx: ALL customer booking fields now mandatory — "What are we moving?" items list, at least ONE photo, and Notes are required (Continue/Confirm disabled until filled). Addresses/date/time/van/name/phone already required.
 - Sign-in / register now happens at the END via an inline modal (booking-auth-modal) inside the wizard — no navigation away — so uploaded photos are NOT lost. Guests fill everything (photos held locally as File objects), then register/login in the modal; on success photos upload and booking is created, navigates to /jobs.
 - Verified: iteration_15.json — 100% backend + frontend. Photos confirmed persisted (non-empty) after sign-in-at-end. Logged-in customers skip the modal.
+
+## 2026-06 — Remove estimated price + force floor/access choice
+- BookingWizard.jsx: REMOVED the live "estimated price" block entirely (and the /quote fetch effect) — no price is shown anywhere in the booking wizard.
+- Floors & access step now requires ACTIVE selection: floor defaults changed to blank/null; FloorPicker shows "Select floor" placeholder + "Lift available"/"Stairs only" buttons (no default). Continue stays disabled until pickup floor + pickup access + dropoff floor + dropoff access are all chosen.
+- Verified iteration_16.json (frontend 100%): no wizard-price/wizard-total at any step; floor gating enforced (disabled until all 4 chosen); booking creates and persists pickup_floor/dropoff_floor/pickup_lift/dropoff_lift correctly.
+- Note (out of scope): testing agent observed GET /api/bookings may return id=null for latest booking; downstream uses booking_id so not blocking.
