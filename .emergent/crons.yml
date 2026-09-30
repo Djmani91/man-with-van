@@ -1,0 +1,8 @@
+crons:
+  - name: release-unaccepted
+    description: "Re-lists instant jobs the chosen driver didn't confirm within 30 minutes so other drivers can grab them"
+    cron: "*/15 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/release-unaccepted"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

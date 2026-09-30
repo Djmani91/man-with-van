@@ -239,7 +239,8 @@ async def send_driver_job_alert(to_email: str, driver_name: str, booking: dict):
 
 
 async def send_driver_fixed_alert(to_email: str, driver_name: str, booking: dict):
-    price = booking.get("fixed_price") or booking.get("price") or 0
+    price = float(booking.get("fixed_price") or booking.get("price") or 0)
+    earnings = round(price * 0.85, 2)
     inner = (
         f'<p style="font-size:16px;color:#0f172a">Hi {escape(driver_name)},</p>'
         f'<p style="font-size:15px;color:#b91c1c;line-height:1.6;font-weight:700">🚨 URGENT — a fixed-price job just became available near you.</p>'
@@ -247,7 +248,7 @@ async def send_driver_fixed_alert(to_email: str, driver_name: str, booking: dict
         '<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">'
         + _row("Van", booking.get("van_name", ""))
         + _row("Date & time", f'{booking.get("date","")} at {booking.get("time","")}')
-        + _row("Fixed price", f'£{float(price):.2f}')
+        + _row("You earn", f'£{earnings:.2f}')
         + '</table>'
         f'<p style="font-size:15px;color:#475569;line-height:1.6">Open your Driver Hub → Quotation and tap Accept before someone else does.</p>'
     )

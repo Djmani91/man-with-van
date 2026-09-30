@@ -32,7 +32,7 @@ function stairsWarning(job) {
   return null;
 }
 
-export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, onDecline, onWithdraw, DRIVER_STEPS, LABEL }) {
+export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, onCancel, onAccept, onDecline, onConfirm, onWithdraw, DRIVER_STEPS, LABEL }) {
   const [price, setPrice] = useState(job.my_bid || "");
   const quotesUsed = job.quotes_used || 0;
   const quotesLeft = Math.max(0, 2 - quotesUsed);
@@ -100,8 +100,8 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
             <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 flex items-start gap-3" data-testid="fixed-price-badge">
               <Wallet className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-heading font-bold text-emerald-800">Fixed price: £{(job.customer_pays || 0).toFixed(0)}</p>
-                <p className="text-sm text-emerald-700">Priority job — no bidding. First driver to accept gets it.</p>
+                <p className="font-heading font-bold text-emerald-800">You earn £{(job.your_earnings || 0).toFixed(0)}</p>
+                <p className="text-sm text-emerald-700">Fixed price — no bidding. First driver to accept gets it.</p>
               </div>
             </div>
           ) : (
@@ -172,7 +172,7 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
         )}
 
         {/* Earnings breakdown */}
-        {(mode !== "quotation" || job.fixed_price) && (
+        {mode !== "quotation" && (
           <div className="border-t border-slate-200 pt-4" data-testid="earnings-breakdown">
             <p className="text-sm text-slate-500 mb-2">Earnings breakdown</p>
             <div className="flex items-center justify-between">
@@ -242,6 +242,13 @@ export function DriverJobDetail({ job, mode, onClose, onBid, onStatus, onChat, o
 
         {mode === "accepted" && (
           <div className="border-t border-slate-200 pt-4 space-y-3">
+            {job.awaiting_driver_accept && (
+              <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-3 space-y-2" data-testid="confirm-window">
+                <p className="flex items-center gap-2 font-heading font-bold text-amber-800"><Clock className="h-4 w-4" /> Confirm within 30 minutes</p>
+                <p className="text-xs text-amber-700">The customer chose you and paid. Confirm now or this job is released to other drivers.</p>
+                <Button onClick={() => onConfirm(job.booking_id)} className="w-full bg-primary hover:bg-[#4C1D95] h-11" data-testid="job-detail-confirm"><CheckCircle2 className="h-4 w-4 mr-2" /> Confirm job</Button>
+              </div>
+            )}
             {job.customer_phone && <p className="flex items-center gap-2 text-slate-700"><Phone className="h-4 w-4 text-slate-400" /> {job.customer_name} · {job.customer_phone}</p>}
             <div>
               <p className="text-xs text-slate-500 mb-1.5">Update job status</p>

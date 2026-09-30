@@ -84,6 +84,10 @@ export default function DriverDashboard() {
     try { const { data } = await api.post(`/driver/jobs/${id}/decline`); toast.success(data.message || "Job declined"); setDetail(null); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); load(); }
   };
+  const confirmJob = async (id) => {
+    try { const { data } = await api.post(`/driver/jobs/${id}/confirm`); toast.success(data.message || "Job confirmed"); setDetail(null); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); load(); }
+  };
   const setStatus = async (id, status) => {
     try { await api.post(`/driver/jobs/${id}/status`, { status }); toast.success("Status updated"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -214,13 +218,21 @@ export default function DriverDashboard() {
             {activeAccepted.length === 0 ? <Empty icon={CheckCircle2} text="No accepted jobs yet." />
               : activeAccepted.map((j) => (
                 <JobCard key={j.booking_id} job={j} showContact testid={`accepted-${j.booking_id}`} onOpen={() => setDetail({ job: j, mode: "accepted" })}>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Badge className="bg-blue-100 text-blue-700 border-0">{LABEL[j.status] || j.status}</Badge>
-                    <Select value={DRIVER_STEPS.find((s) => s.v === j.status)?.v || ""} onValueChange={(v) => setStatus(j.booking_id, v)}>
-                      <SelectTrigger className="h-9 flex-1 text-sm" data-testid={`driver-status-${j.booking_id}`}><SelectValue placeholder="Update status" /></SelectTrigger>
-                      <SelectContent>{DRIVER_STEPS.map((s) => <SelectItem key={s.v} value={s.v}>{s.l}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
+                  {j.awaiting_driver_accept ? (
+                    <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3" data-testid={`confirm-prompt-${j.booking_id}`}>
+                      <p className="flex items-center gap-2 text-sm font-bold text-amber-800"><Hourglass className="h-4 w-4" /> Confirm within 30 minutes</p>
+                      <p className="text-xs text-amber-700 mt-0.5">Confirm now or this job goes to other drivers.</p>
+                      <Button size="sm" onClick={() => confirmJob(j.booking_id)} className="mt-2 w-full bg-primary hover:bg-[#4C1D95] gap-1.5" data-testid={`confirm-btn-${j.booking_id}`}><CheckCircle2 className="h-3.5 w-3.5" /> Confirm job</Button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Badge className="bg-blue-100 text-blue-700 border-0">{LABEL[j.status] || j.status}</Badge>
+                      <Select value={DRIVER_STEPS.find((s) => s.v === j.status)?.v || ""} onValueChange={(v) => setStatus(j.booking_id, v)}>
+                        <SelectTrigger className="h-9 flex-1 text-sm" data-testid={`driver-status-${j.booking_id}`}><SelectValue placeholder="Update status" /></SelectTrigger>
+                        <SelectContent>{DRIVER_STEPS.map((s) => <SelectItem key={s.v} value={s.v}>{s.l}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => setChat(j.booking_id)} className="mt-2 w-full gap-1.5" data-testid={`driver-chat-${j.booking_id}`}><Send className="h-3.5 w-3.5" /> Message customer</Button>
                 </JobCard>
               ))}
@@ -297,7 +309,7 @@ export default function DriverDashboard() {
         <DriverJobDetail
           job={detail.job} mode={detail.mode}
           onClose={() => setDetail(null)}
-          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }} onCancel={cancelJob} onAccept={acceptJob} onDecline={declineJob} onWithdraw={withdrawQuote}
+          onBid={sendQuote} onStatus={setStatus} onChat={(id) => { setDetail(null); setChat(id); }} onCancel={cancelJob} onAccept={acceptJob} onDecline={declineJob} onConfirm={confirmJob} onWithdraw={withdrawQuote}
           DRIVER_STEPS={DRIVER_STEPS} LABEL={LABEL}
         />
       )}
@@ -306,7 +318,7 @@ export default function DriverDashboard() {
 }
 
 const JobCard = ({ job, children, showContact, onOpen }) => {
-  const amount = job.my_bid ?? job.customer_pays ?? job.price;
+  const amount = job.fixed_price ? job.your_earnings : (job.my_bid ?? job.customer_pays ?? job.price);
   const bd = fmtCardDate(job.date);
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4" data-testid={`job-${job.booking_id}`}>

@@ -141,8 +141,7 @@ export default function AreaLanding() {
         <p className="text-slate-600 mt-4 leading-relaxed text-[15px]">{a.intro}</p>
         <p className="text-slate-600 mt-4 leading-relaxed text-[15px]">
           Whether you're moving a single sofa off {a.landmarks[0]}, a one-bed flat or a full family house, you get an instant fixed
-          quote from just £15 per hour, a vetted and insured driver, and live tracking from pickup to drop-off. There's no deposit to
-          book and you pay after your move is complete.
+          quote from just £15 per hour, a vetted and insured driver, and live tracking from pickup to drop-off.
         </p>
       </section>
 
@@ -170,7 +169,7 @@ export default function AreaLanding() {
         <div className="grid md:grid-cols-3 gap-6 mt-8">
           {[
             { icon: MapPin, t: "1. Get your quote", d: `Enter your ${a.name} pickup and drop-off, van size, floors and time for a fixed price in seconds.` },
-            { icon: CheckCircle2, t: "2. Confirm your slot", d: "Pick a date and time and confirm — no deposit, pay after your move." },
+            { icon: CheckCircle2, t: "2. Confirm your slot", d: "Pick a date and time and confirm your booking." },
             { icon: Truck, t: "3. Track it live", d: "We assign a vetted local driver and you follow the whole move on the live map." },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7">

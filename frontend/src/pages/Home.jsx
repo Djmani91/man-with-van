@@ -30,11 +30,11 @@ const REVIEWS = [
 ];
 
 const FAQS = [
-  { q: "How much does a man and van cost?", a: "Prices start from just £15 per hour for a small van. You get an instant fixed quote based on your van size, distance, floors and time — no hidden fees, and you pay after your move." },
+  { q: "How much does a man and van cost?", a: "Prices start from just £15 per hour for a small van. You get an instant fixed quote based on your van size, distance, floors and time — no hidden fees." },
   { q: "How quickly can a driver pick up?", a: "In most areas a driver can be with you on the same day, often within the hour during working times. You'll see your driver's live location and ETA on the tracking map once they're assigned." },
   { q: "Do you cover the whole UK?", a: "Yes. We started in London and now cover any UK postcode — from single-item deliveries to full house and office relocations, local or long-distance." },
   { q: "Are your drivers insured?", a: "Every driver is vetted and fully insured, with licence, insurance and MOT verified before they can accept jobs. Your belongings are covered on every move." },
-  { q: "When and how do I pay?", a: "You pay after your move is complete — no deposit needed to book. Your fixed quote is locked in when you confirm, so the price you see is the price you pay." },
+  { q: "When and how do I pay?", a: "You pay securely by card when you confirm your booking. Your fixed quote is locked in when you confirm, so the price you see is the price you pay." },
   { q: "Can I track my move live?", a: "Absolutely. Once dispatch assigns your driver you can follow their location on a live map, see a status timeline and an accurate ETA from pickup to drop-off." },
 ];
 
@@ -61,7 +61,7 @@ export default function Home() {
             Book a local<br /><span className="text-primary">man &amp; van</span> in minutes
           </h1>
           <p className="mt-5 text-lg text-slate-600 max-w-lg leading-relaxed">
-            Instant fixed quotes, vetted &amp; insured drivers and live move tracking — across any UK postcode. No deposit, pay after your move.
+            Instant fixed quotes, vetted &amp; insured drivers and live move tracking — across any UK postcode.
           </p>
 
           <div className="flex items-center gap-2 mt-6">
@@ -111,7 +111,7 @@ export default function Home() {
         <div className="grid md:grid-cols-3 gap-6 mt-10">
           {[
             { icon: MapPin, t: "1. Get an instant quote", d: "Enter pickup & drop-off, van size, floors and time for a fixed, transparent price in seconds." },
-            { icon: CheckCircle2, t: "2. Confirm your slot", d: "Pick a date and time, add photos of your items and confirm — no deposit, pay after your move." },
+            { icon: CheckCircle2, t: "2. Confirm your slot", d: "Pick a date and time, add photos of your items and confirm your booking." },
             { icon: Truck, t: "3. Track it live", d: "We assign a vetted driver and you follow the whole move on the live map, right to the door." },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7 relative overflow-hidden">

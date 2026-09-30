@@ -55,6 +55,8 @@ INSTANT_RADIUS_EXPANDED_MI = 10
 BIDDING_RADIUS_MI = 20
 FIXED_RADIUS_MI = 30
 MIN_BID = 50
+ACCEPT_WINDOW_MIN = 30  # minutes a chosen driver has to confirm an instant job before it re-lists
+WEBHOOK_CRON_SECRET = os.environ.get("WEBHOOK_CRON_SECRET", "")
 VAN_ORDER = ["small", "medium", "large", "xl"]
 
 
@@ -1153,14 +1155,22 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
         timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
                     {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
 
-    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+    final_mode = b.get("mode") or "instant"
+    set_fields = {
         "driver_id": driver_id,
         "driver": {"name": prof["name"], "phone": prof["phone"], "vehicle": prof["vehicle"],
                    "rating": prof.get("rating", 5.0)},
         "price": price, "status": "assigned",
         "payment": payment,
-        "timeline": timeline, "mode": b.get("mode") or "instant",
-    }})
+        "timeline": timeline, "mode": final_mode,
+    }
+    # Instant-quotation jobs: the chosen driver must confirm within 30 minutes or it re-lists.
+    if final_mode == "instant":
+        set_fields["awaiting_driver_accept"] = True
+        set_fields["accept_deadline"] = (datetime.now(timezone.utc) + timedelta(minutes=ACCEPT_WINDOW_MIN)).isoformat()
+    else:
+        set_fields["awaiting_driver_accept"] = False
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": set_fields})
     await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})
     await db.bids.update_many({"booking_id": booking_id, "driver_id": driver_id}, {"$set": {"status": "accepted"}})
     await db.bids.update_many({"booking_id": booking_id, "driver_id": {"$ne": driver_id}}, {"$set": {"status": "declined"}})
@@ -1569,7 +1579,7 @@ async def _broadcast_fixed_reoffer(booking_id: str, exclude_driver_id: str = Non
             await db.notifications.insert_one({
                 "id": str(uuid.uuid4()), "driver_id": d["user_id"], "booking_id": booking_id,
                 "type": "fixed_reoffer", "title": "🚨 Urgent fixed-price job",
-                "body": f"{b.get('van_name','')} · £{float(b.get('fixed_price') or b.get('price') or 0):.2f} · first to accept wins",
+                "body": f"{b.get('van_name','')} · £{round(float(b.get('fixed_price') or b.get('price') or 0) * (1 - COMMISSION_RATE), 2):.2f} · first to accept wins",
                 "read": False, "created_at": now,
             })
             u = await db.users.find_one({"user_id": d["user_id"]}, {"_id": 0})
@@ -1580,6 +1590,66 @@ async def _broadcast_fixed_reoffer(booking_id: str, exclude_driver_id: str = Non
                     logger.error(f"Fixed re-offer email failed: {e}")
     except Exception as e:
         logger.error(f"Fixed re-offer broadcast failed: {e}")
+
+
+async def _release_unaccepted_jobs():
+    """Re-list instant jobs the chosen driver didn't confirm within the accept window."""
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    expired = await db.bookings.find(
+        {"awaiting_driver_accept": True, "status": "assigned", "accept_deadline": {"$lt": now}},
+        {"_id": 0}).to_list(500)
+    for b in expired:
+        prev_driver = b.get("driver_id")
+        res = await db.bookings.update_one(
+            {"booking_id": b["booking_id"], "awaiting_driver_accept": True, "status": "assigned"},
+            {"$set": {
+                "status": "quoting", "driver_id": None, "driver": None, "mode": "fixed",
+                "fixed_price": b.get("price"), "awaiting_driver_accept": False,
+                "timeline": (b.get("timeline") or []) + [{"status": "quoting", "label": "Driver didn't confirm in time — finding a new driver", "at": now}],
+            }})
+        if res.modified_count == 0:
+            continue  # someone else already handled it (race)
+        if prev_driver:
+            await db.driver_profiles.update_one({"user_id": prev_driver}, {"$set": {"availability": "available"}})
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()), "driver_id": prev_driver, "booking_id": b["booking_id"], "type": "job_expired",
+                "title": "Job released", "body": "You didn't confirm in time, so the job was offered to other drivers.",
+                "read": False, "created_at": now})
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()), "user_id": b["user_id"], "booking_id": b["booking_id"], "type": "driver_timeout",
+            "title": "Finding you another driver", "body": "Your driver didn't confirm in time. We're finding another driver — your payment is safe.",
+            "read": False, "created_at": now})
+        asyncio.create_task(_broadcast_fixed_reoffer(b["booking_id"], exclude_driver_id=prev_driver))
+    return len(expired)
+
+
+@api_router.post("/driver/jobs/{booking_id}/confirm")
+async def driver_confirm_job(booking_id: str, user: dict = Depends(require_driver)):
+    b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b.get("driver_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your job")
+    if not b.get("awaiting_driver_accept"):
+        return {"status": b.get("status"), "message": "This job is already confirmed."}
+    if b.get("accept_deadline") and b["accept_deadline"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=400, detail="The 30-minute window has passed and this job was released to other drivers.")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "awaiting_driver_accept": False,
+        "timeline": (b.get("timeline") or []) + [{"status": "assigned", "label": "Driver confirmed the job", "at": now}],
+    }})
+    return {"status": "assigned", "message": "Job confirmed — it's yours."}
+
+
+@api_router.post("/cron/release-unaccepted")
+async def cron_release_unaccepted(authorization: str = Header(None)):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(token, WEBHOOK_CRON_SECRET):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    asyncio.create_task(_release_unaccepted_jobs())
+    return {"status": "accepted"}
+
 
 
 @api_router.get("/driver/profile")
