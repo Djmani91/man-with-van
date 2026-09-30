@@ -1,0 +1,22 @@
+{
+  "summary": "Referral perk feature tested end-to-end. Backend: 10/10 pytest tests passed covering /api/referral/me shape (code/credit/reward_each/referred_count/rewarded_count), 6-char uppercase code generation, /auth/register + /auth/me returning referral_code + referral_credit, referral tracking (A's referred_count increments after B registers with ref, credits stay 0 as expected before paid booking), invalid/empty/lowercase ref handling, code stability across calls, and auth requirement. Frontend: Student Discount page renders H1, STUDENT10 code, 12-item FAQ, 16 university chips; ReferralCard hidden when logged-out but student-refer-section shell still renders (no crash) and is populated when logged in. Register page shows register-ref-banner only when ?ref=<CODE> present, and submitting it correctly increments referrer's invited count to 1 (verified via Account page). Account page ReferralCard shows code (6 chars), £0.00 credit, count, and Copy code / Copy link / Share buttons. Did NOT complete any Square payment (production LIVE per instructions).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_referral.py",
+    "/app/test_reports/pytest/referral_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 1187 lines — consider splitting into modules (auth, referral, bookings, payments).",
+    "resolve_referrer accepts the caller's user_id and checks user_id != new_user_id, but at registration new_user_id is generated pre-insert so self-referral is structurally impossible; safeguard is fine but note that referred_by is stored on the new user and never validated against active/deleted referrers.",
+    "REFERRAL_REWARD/MIN_CARD_CHARGE credit application logic could not be executed against real Square in test (per instructions); recommend adding a unit-test-only hook or a stub path so the £5 grant + STUDENT10 stacking (10% first, then credit) can be exercised without a live charge."
+  ],
+  "updated_files": ["/app/backend/tests/test_referral.py"],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "Ephemeral test users created per run: reftest+<rand>@example.com / Test#2026",
+  "seed_data_creation": "Created 2 ephemeral customer accounts per run via /api/auth/register (A + B) plus a few for pytest cases; all use TEST-like reftest+... emails and start with 0 credit.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend referral suite lives at /app/backend/tests/test_referral.py and runs in ~5s. The end-to-end £5 grant on first paid booking is NOT covered because Square is LIVE production; if a sandbox flag or bypass hook is added later, extend test_referral.py with a paid-booking flow that asserts both users' referral_credit becomes 5.0 and A.rewarded_count becomes 1."
+}
