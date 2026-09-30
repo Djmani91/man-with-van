@@ -30,7 +30,7 @@ const blank = {
   pickup_access: "", dropoff_access: "",
   pickup_floor: 0, pickup_lift: false, dropoff_floor: 0, dropoff_lift: false,
   date: "", time: "", van_size: "",
-  needs_helper: false, heavy_items: false,
+  needs_helper: false, heavy_items: false, crew: "",
   items: "", photos: [], customer_name: "", customer_phone: "", notes: "", promo_code: "",
 };
 
@@ -62,6 +62,8 @@ export const BookingWizard = ({ compact = true }) => {
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const setCrew = (v) => setForm((f) => ({ ...f, crew: v, needs_helper: v === "helper" }));
 
   const setAccess = (which, v) => {
     setForm((f) => {
@@ -98,7 +100,7 @@ export const BookingWizard = ({ compact = true }) => {
     }
     if (step === 2) return form.date && form.time;
     if (step === 3) return form.van_size;
-    if (step === 4) return form.items.trim() && previews.length > 0;
+    if (step === 4) return form.items.trim() && previews.length > 0 && form.crew;
     if (step === 5) return form.customer_name.trim() && form.customer_phone.trim() && form.notes.trim();
     return true;
   }, [step, form, previews]);
@@ -107,7 +109,7 @@ export const BookingWizard = ({ compact = true }) => {
     && form.pickup_access && (form.pickup_access !== "stairs" || form.pickup_floor >= 1)
     && form.dropoff_access && (form.dropoff_access !== "stairs" || form.dropoff_floor >= 1)
     && form.date && form.time && form.van_size
-    && form.items.trim() && previews.length > 0
+    && form.items.trim() && previews.length > 0 && form.crew
     && form.customer_name.trim() && form.customer_phone.trim() && form.notes.trim();
 
   const onFiles = (e) => {
@@ -284,18 +286,26 @@ export const BookingWizard = ({ compact = true }) => {
                     <Label>What are we moving? <span className="text-rose-500">*</span></Label>
                     <Textarea value={form.items} onChange={(e) => set("items", e.target.value)} placeholder="e.g. Double bed, 3-seat sofa, washing machine, 10 boxes" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-items" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button type="button" onClick={() => set("needs_helper", !form.needs_helper)} data-testid="wizard-helper"
-                      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${form.needs_helper ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
-                      <span><span className="block text-sm font-semibold text-slate-900">Need a helper?</span><span className="block text-xs text-slate-500">Driver + 1 to carry</span></span>
-                      <Check className={`h-5 w-5 ${form.needs_helper ? "text-primary" : "text-transparent"}`} />
-                    </button>
-                    <button type="button" onClick={() => set("heavy_items", !form.heavy_items)} data-testid="wizard-heavy"
-                      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${form.heavy_items ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
-                      <span><span className="block text-sm font-semibold text-slate-900">Heavy / bulky items?</span><span className="block text-xs text-slate-500">e.g. piano, appliances</span></span>
-                      <Check className={`h-5 w-5 ${form.heavy_items ? "text-primary" : "text-transparent"}`} />
-                    </button>
+                  <div className="space-y-2">
+                    <Label>Who will carry the items? <span className="text-rose-500">*</span></Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setCrew("me")} data-testid="crew-me"
+                        className={`rounded-xl border-2 px-3 py-3 text-left transition-all ${form.crew === "me" ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
+                        <span className="block text-sm font-semibold text-slate-900">Driver + me</span>
+                        <span className="block text-xs text-slate-500">I'll help carry</span>
+                      </button>
+                      <button type="button" onClick={() => setCrew("helper")} data-testid="crew-helper"
+                        className={`rounded-xl border-2 px-3 py-3 text-left transition-all ${form.crew === "helper" ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
+                        <span className="block text-sm font-semibold text-slate-900">Driver + 1 helper</span>
+                        <span className="block text-xs text-slate-500">Bring an extra person</span>
+                      </button>
+                    </div>
                   </div>
+                  <button type="button" onClick={() => set("heavy_items", !form.heavy_items)} data-testid="wizard-heavy"
+                    className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${form.heavy_items ? "border-primary bg-violet-50" : "border-slate-200 hover:border-violet-300"}`}>
+                    <span><span className="block text-sm font-semibold text-slate-900">Heavy / bulky items?</span><span className="block text-xs text-slate-500">e.g. piano, appliances</span></span>
+                    <Check className={`h-5 w-5 ${form.heavy_items ? "text-primary" : "text-transparent"}`} />
+                  </button>
                   <div className="space-y-2">
                     <Label>Photos <span className="text-rose-500">*</span> <span className="text-slate-400 font-normal">(at least one)</span></Label>
                     <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl py-6 cursor-pointer hover:border-violet-400 transition-colors text-sm text-slate-500" data-testid="wizard-photo-label">

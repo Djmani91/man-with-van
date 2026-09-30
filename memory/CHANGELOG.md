@@ -143,3 +143,8 @@
 - Root cause: GET /api/files/{path} only authenticated via Authorization: Bearer header or ?auth= query param. An <img src> tag can send neither, so driver-side photo requests returned 401 and images never rendered.
 - Fix: /files now also reads the session_token cookie (falls back to Bearer header, then ?auth=). Web <img> requests now load (cookie sent automatically); still 401 without any auth.
 - Verified via curl: with cookie -> HTTP 200 image/png; no auth -> 401. driver_job_view already includes `photos` for assigned + available/instant jobs.
+
+## 2026-06 — Two crew options (Driver + me / Driver + 1 helper)
+- BookingWizard: replaced the single "Need a helper?" toggle with two explicit, required options in the Photos & items step: "Driver + me" (customer assists) and "Driver + 1 helper". Added form.crew (""|"me"|"helper"); setCrew maps needs_helper = (crew === "helper"). Required in step-4 validation and mobile allValid. Heavy items kept as a separate toggle.
+- Driver side already distinguishes via needs_helper: DriverJobDetail crew card shows "Driver + helper needed" vs "Driver + customer (customer will assist)" — now driven by the customer's explicit choice.
+- Verified: frontend compiles; driver-side crew display previously tested (iter 14/19). Backend unchanged (needs_helper already stored + returned).
