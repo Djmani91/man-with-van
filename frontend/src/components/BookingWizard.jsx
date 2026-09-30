@@ -139,18 +139,21 @@ export const BookingWizard = ({ compact = true }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-5 sm:p-7" data-testid="booking-wizard">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-5 sm:p-7 w-full min-w-0" data-testid="booking-wizard">
       <h2 className="font-heading text-2xl font-bold text-slate-900">Book your man &amp; van</h2>
       <p className="text-sm text-slate-500 mt-1">Takes about a minute — pay after your move.</p>
 
       {/* Stepper */}
-      <div className="flex gap-1 mt-5 overflow-x-auto pb-1" data-testid="wizard-stepper">
-        {STEPS.map((label, i) => (
-          <div key={label} className="flex-1 min-w-[70px]">
-            <div className={`h-1 rounded-full transition-colors ${i <= step ? "bg-primary" : "bg-slate-200"}`} />
-            <p className={`text-[11px] mt-1.5 font-medium whitespace-nowrap ${i === step ? "text-primary" : i < step ? "text-slate-700" : "text-slate-400"}`}>{label}</p>
-          </div>
-        ))}
+      <div className="mt-5" data-testid="wizard-stepper">
+        <div className="flex gap-1.5">
+          {STEPS.map((label, i) => (
+            <div key={label} className="flex-1 min-w-0">
+              <div className={`h-1.5 rounded-full transition-colors ${i <= step ? "bg-primary" : "bg-slate-200"}`} />
+              <p className={`hidden sm:block text-[11px] mt-1.5 font-medium truncate ${i === step ? "text-primary" : i < step ? "text-slate-700" : "text-slate-400"}`}>{label}</p>
+            </div>
+          ))}
+        </div>
+        <p className="sm:hidden text-xs font-semibold text-primary mt-2" data-testid="wizard-step-label">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
       </div>
 
       <div className="mt-5 min-h-[240px]">
