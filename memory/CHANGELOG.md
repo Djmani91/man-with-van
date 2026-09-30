@@ -152,3 +152,10 @@
 ## 2026-06 — Fix: Google Pay button did nothing + driver withdraw/re-quote
 - Driver quotation: bidding job detail shows Submit quote + Message (Decline removed); after submitting, waiting detail shows Withdraw quote + Message. Withdraw returns the job to the open Quotation page. Max 2 quotes per driver per job (attempts counter); 3rd attempt blocked. Backend POST /driver/jobs/{id}/withdraw + bid upsert with attempts; /driver/available hides live/exhausted, exposes quotes_used. Verified iteration_22.json 100%.
 - Square Google Pay fix: gp.attach() only renders the button; it never tokenized on click (Apple Pay had a handler, Google Pay didn't) — so clicking did nothing. Added a click listener on the Google Pay element that calls gp.tokenize() then onToken(). Removed unused payGoogle. NOTE: real Google Pay still requires the browser/device to be eligible (Chrome + Google account + HTTPS) and Square merchant Google Pay enabled; cannot e2e a live wallet charge here.
+
+## 2026-06 — Customer invoice / receipt (on-screen + PDF)
+- New InvoiceModal.jsx: shows a full receipt from booking.payment — invoice no (INV-<id>), date paid, PAID badge, billed-to, driver/vehicle, pickup→dropoff + date/time, price breakdown (subtotal, promo discount, order total, referral credit, amount paid now, paid by card), Square txn ref.
+- Deposit wording: "Deposit paid — remaining balance £X payable to the driver on moving day." Full payment shows a paid-in-full note.
+- Download PDF via jspdf + html2canvas (hex colors used to avoid html2canvas oklch issues). Added jspdf + html2canvas deps.
+- MyJobs: "Invoice" button on each booking whose payment.status is paid/office; opens the modal.
+- Verified iteration_23.json (frontend 100%): button gating, on-screen content, deposit balance note, and PDF download (INV-MWVE95427B8.pdf) all work, no html2canvas errors.

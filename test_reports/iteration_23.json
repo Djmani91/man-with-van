@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only test of Invoice/PDF feature for paid deposit booking MWVE95427B8. All acceptance criteria met: invoice button appears only for paid booking, on-screen modal shows PAID badge, correct customer/driver/vehicle/pickup/dropoff/date info, order total £70.00, amount paid now (15% deposit) £10.50, amber balance note 'Deposit paid — remaining balance £59.50 payable to the driver on moving day.' PDF download triggered with filename INV-MWVE95427B8.pdf, no JS errors, button returned from 'Preparing PDF…' to 'Download PDF'. html2canvas produced no errors (only debug logs).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Invoice modal", "issues": ["Minor inconsistency: 'Move service (Large Luton Van)' line uses booking.van_name while driver row shows 'Medium Van (SWB)' — a driver upgraded/downgraded the van. Not blocking, but consider showing offered_van_name in the line item for accuracy."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "InvoiceModal is clean; uses hex colors to avoid html2canvas oklch issues (verified — no color-function errors in console).",
+    "downloadPdf tall-invoice pagination logic renders the full image on every page (uses same img with adjusted y) — works but could produce oversized files; not blocking as this invoice fits one page."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "customer@example.com / Customer#2026",
+  "seed_data_creation": "Used existing seeded booking MWVE95427B8",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Invoice/PDF feature is fully working. data-testids verified: invoice-MWVE95427B8, invoice-modal, invoice-paid-badge, invoice-body, invoice-order-total, invoice-paid-now, invoice-balance-note, invoice-download-btn. PDF file INV-MWVE95427B8.pdf downloaded successfully."
+}
