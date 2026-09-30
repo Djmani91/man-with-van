@@ -23,7 +23,7 @@ const FLOORS = [{ v: 0, l: "Ground" }, { v: 1, l: "1st floor" }, { v: 2, l: "2nd
 const DRAFT_KEY = "mwv_booking_draft";
 
 const blank = {
-  pickup: "", pickup_flat: "", dropoff: "",
+  pickup: "", dropoff: "",
   pickup_floor: 0, pickup_lift: true, dropoff_floor: 0, dropoff_lift: true,
   date: "", time: "", van_size: "",
   needs_helper: false, heavy_items: false,
@@ -165,10 +165,6 @@ export const BookingWizard = ({ compact = true }) => {
                   <div className="space-y-2">
                     <Label>Pickup address</Label>
                     <AddressAutocomplete value={form.pickup} onChange={(v) => set("pickup", v)} placeholder="Search by postcode or street…" testid="wizard-pickup" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Flat / house number &amp; street <span className="text-slate-400 font-normal">(optional)</span></Label>
-                    <Input value={form.pickup_flat} onChange={(e) => set("pickup_flat", e.target.value)} placeholder="e.g. Flat 4, 12 Ashford Road" className="focus:ring-2 focus:ring-violet-500" data-testid="wizard-pickup-flat" />
                   </div>
                   <div className="space-y-2">
                     <Label>Drop-off address</Label>
