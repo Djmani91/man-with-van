@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2, AlertTriangle,
+  Truck, ArrowRight, ArrowLeft, Check, Calendar, Clock, Upload, X, Building2,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { getPromo, loadPromo, savePromo, clearPromo } from "@/lib/promo";
 import {
@@ -25,7 +24,7 @@ const DRAFT_KEY = "mwv_booking_draft";
 
 const blank = {
   pickup: "", dropoff: "",
-  pickup_floor: 0, pickup_lift: true, dropoff_floor: 0, dropoff_lift: true,
+  pickup_floor: "", pickup_lift: null, dropoff_floor: "", dropoff_lift: null,
   date: "", time: "", van_size: "",
   needs_helper: false, heavy_items: false,
   items: "", photos: [], customer_name: "", customer_phone: "", notes: "", promo_code: "",
@@ -36,7 +35,6 @@ export const BookingWizard = ({ compact = true }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [vans, setVans] = useState([]);
-  const [quote, setQuote] = useState(null);
   const [previews, setPreviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -62,8 +60,6 @@ export const BookingWizard = ({ compact = true }) => {
   }, []);
 
   const promo = getPromo(form.promo_code);
-  const discountAmount = promo && quote ? +(quote.total * promo.pct).toFixed(2) : 0;
-  const discountedTotal = quote ? +(quote.total - discountAmount).toFixed(2) : 0;
 
   useEffect(() => {
     api.get("/vansizes").then(({ data }) => setVans(data)).catch(() => {});
@@ -72,24 +68,9 @@ export const BookingWizard = ({ compact = true }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const canQuote = form.pickup && form.dropoff && form.van_size && form.date && form.time;
-  useEffect(() => {
-    if (!canQuote) { setQuote(null); return; }
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await api.post("/quote", {
-          pickup: form.pickup, dropoff: form.dropoff, van_size: form.van_size, date: form.date, time: form.time,
-          pickup_floor: form.pickup_floor, dropoff_floor: form.dropoff_floor,
-          pickup_lift: form.pickup_lift, dropoff_lift: form.dropoff_lift, heavy_items: form.heavy_items,
-        });
-        setQuote(data);
-      } catch { setQuote(null); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [form.pickup, form.dropoff, form.van_size, form.date, form.time, form.pickup_floor, form.dropoff_floor, form.pickup_lift, form.dropoff_lift, form.heavy_items, canQuote]);
-
   const stepValid = useMemo(() => {
     if (step === 0) return form.pickup && form.dropoff;
+    if (step === 1) return form.pickup_floor !== "" && form.dropoff_floor !== "" && form.pickup_lift !== null && form.dropoff_lift !== null;
     if (step === 2) return form.date && form.time;
     if (step === 3) return form.van_size;
     if (step === 4) return form.items.trim() && previews.length > 0;
@@ -326,34 +307,6 @@ export const BookingWizard = ({ compact = true }) => {
         </AnimatePresence>
       </div>
 
-      {/* Live price */}
-      {quote && (
-        <div className="bg-violet-50 rounded-xl px-4 py-3 mt-2" data-testid="wizard-price">
-          {promo ? (
-            <>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500 line-through">£{quote.total.toFixed(2)}</span>
-                <span className="text-emerald-600 font-semibold" data-testid="wizard-discount">− £{discountAmount.toFixed(2)} ({promo.label})</span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-sm text-slate-600">Your price · {quote.distance_miles} mi</span>
-                <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{discountedTotal.toFixed(2)}</span>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Estimated fixed price · {quote.distance_miles} mi</span>
-              <span className="font-heading text-xl font-bold text-primary" data-testid="wizard-total">£{quote.total.toFixed(2)}</span>
-            </div>
-          )}
-          {quote.congestion_fee > 0 && (
-            <p className="text-xs text-amber-700 mt-2 flex items-center gap-1.5" data-testid="wizard-congestion-fee">
-              <AlertTriangle className="h-3.5 w-3.5" /> Includes £{quote.congestion_fee.toFixed(2)} Central London congestion charge
-            </p>
-          )}
-        </div>
-      )}
-
       <div className="flex justify-between mt-5 pt-4 border-t border-slate-100">
         <Button variant="ghost" onClick={back} disabled={step === 0} className="gap-2" data-testid="wizard-back">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -415,14 +368,22 @@ const Section = ({ n, title, hint, children }) => (
 const FloorPicker = ({ label, floor, lift, onFloor, onLift, testid }) => (
   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
     <Label className="flex items-center gap-2 mb-3"><Building2 className="h-4 w-4 text-slate-400" /> {label}</Label>
-    <Select value={String(floor)} onValueChange={(v) => onFloor(Number(v))}>
-      <SelectTrigger className="bg-white" data-testid={`floor-${testid}`}><SelectValue /></SelectTrigger>
+    <Select value={floor === "" || floor === null ? undefined : String(floor)} onValueChange={(v) => onFloor(Number(v))}>
+      <SelectTrigger className="bg-white" data-testid={`floor-${testid}`}><SelectValue placeholder="Select floor" /></SelectTrigger>
       <SelectContent>
         {FLOORS.map((f) => <SelectItem key={f.v} value={String(f.v)}>{f.l}</SelectItem>)}
       </SelectContent>
     </Select>
-    <label className="flex items-center gap-2 mt-3 text-sm text-slate-600 cursor-pointer">
-      <Checkbox checked={lift} onCheckedChange={(v) => onLift(!!v)} data-testid={`lift-${testid}`} /> Lift available
-    </label>
+    <p className="text-xs text-slate-500 mt-3 mb-1.5">Access</p>
+    <div className="grid grid-cols-2 gap-2">
+      <button type="button" onClick={() => onLift(true)} data-testid={`lift-yes-${testid}`}
+        className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${lift === true ? "border-primary bg-violet-50 text-primary" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>
+        Lift available
+      </button>
+      <button type="button" onClick={() => onLift(false)} data-testid={`lift-no-${testid}`}
+        className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${lift === false ? "border-primary bg-violet-50 text-primary" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>
+        Stairs only
+      </button>
+    </div>
   </div>
 );
