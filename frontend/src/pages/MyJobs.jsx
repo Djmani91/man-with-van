@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  MapPin, Star, MessageSquare, Truck, ShieldCheck, Zap, Gavel, Calendar, ArrowRight, PackageOpen, Loader2, Radio, AlertTriangle,
+import { FileText, MapPin, Star, MessageSquare, Truck, ShieldCheck, Zap, Gavel, Calendar, ArrowRight, PackageOpen, Loader2, Radio, AlertTriangle,
 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -9,6 +8,7 @@ import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { ChatModal } from "@/components/ChatModal";
 import { SquarePaymentModal } from "@/components/SquarePaymentModal";
+import { InvoiceModal } from "@/components/InvoiceModal";
 import { Seo } from "@/components/Seo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ export default function MyJobs() {
   const [accepting, setAccepting] = useState(null);
   const [broadcasting, setBroadcasting] = useState(false);
   const [payFor, setPayFor] = useState(null); // { driverId, price }
+  const [invoice, setInvoice] = useState(null);
 
   const load = useCallback(async () => {
     const { data } = await api.get("/bookings");
@@ -231,6 +232,9 @@ export default function MyJobs() {
                 <div className="flex items-center justify-between mt-3">
                   <span className="font-heading text-lg font-bold text-slate-900">£{(b.price || 0).toFixed(2)}</span>
                   <div className="flex gap-2">
+                    {(b.payment?.status === "paid" || b.payment?.status === "office") && (
+                      <Button size="sm" variant="outline" onClick={() => setInvoice(b)} data-testid={`invoice-${b.booking_id}`} className="gap-1.5"><FileText className="h-3.5 w-3.5" /> Invoice</Button>
+                    )}
                     {b.driver && <Button size="sm" variant="outline" onClick={() => setChat({ bookingId: b.booking_id, driverId: b.driver_id })} data-testid={`chat-${b.booking_id}`} className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Message</Button>}
                     <Button size="sm" onClick={() => navigate(`/track/${b.booking_id}`)} className="bg-primary hover:bg-[#4C1D95] gap-1.5" data-testid={`track-${b.booking_id}`}>Track <ArrowRight className="h-3.5 w-3.5" /></Button>
                   </div>
@@ -242,6 +246,7 @@ export default function MyJobs() {
       </div>
 
       {chat && <ChatModal bookingId={chat.bookingId} driverId={chat.driverId} open={!!chat} onOpenChange={(o) => !o && setChat(null)} meRole="customer" />}
+      {invoice && <InvoiceModal booking={invoice} open={!!invoice} onOpenChange={(o) => !o && setInvoice(null)} />}
       {payFor && (
         <SquarePaymentModal
           open={!!payFor}
