@@ -17,3 +17,15 @@
   "Step X of N: <label>" line (data-testid wizard-step-label); wizard root w-full min-w-0.
 - Verified by testing agent (iteration_12): scrollWidth==innerWidth==390 on all 4 pages,
   Continue button within viewport, desktop labels intact. 100% frontend pass.
+
+## 2026-06 — Google addresses + instant-quote fix + booking-page nav
+- Google Places (New) address autocomplete: backend proxy at GET /api/address/suggest now
+  calls Google (UK-restricted) with the key kept server-side in GOOGLE_MAPS_API_KEY;
+  falls back to mock list if key missing/error. Frontend unchanged (uses label).
+  ACTION: add GOOGLE_MAPS_API_KEY to PRODUCTION secrets before redeploy.
+- Instant-quotes bug: instant-offers returned empty whenever all drivers' simulated
+  distances exceeded the 20mi cap (common when drivers have no home postcode). Now it
+  always returns the closest up-to-5 available drivers (exact van, else larger-van
+  fallback) so a cost always appears. Verified via curl (5 offers returned).
+- Book page: for logged-in customers, /book hides the top navbar on mobile and shows
+  the bottom nav (Book/My Jobs/Messages/Account); public visitors still see full navbar.

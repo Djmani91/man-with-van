@@ -583,11 +583,10 @@ _STREETS = ["High Street", "Church Road", "Station Road", "Victoria Road", "Gree
 _TOWNS = ["London", "Manchester", "Birmingham", "Leeds", "Bristol", "Liverpool"]
 
 
-@api_router.get("/address/suggest")
-async def address_suggest(q: str = Query("", min_length=0)):
-    q = q.strip()
-    if len(q) < 2:
-        return []
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+
+
+def _mock_suggest(q: str) -> list:
     seed = q.upper().replace(" ", "")
     out = []
     for i in range(5):
@@ -597,6 +596,49 @@ async def address_suggest(q: str = Query("", min_length=0)):
         pc = f"{q.upper()[:4].strip()} {int(_hash_float(seed, 'p', str(i)) * 9)}{chr(65 + i)}{chr(65 + (i * 3) % 26)}"
         out.append({"label": f"{n} {street}, {town} {pc}".strip(), "postcode": pc.strip()})
     return out
+
+
+async def _google_suggest(q: str) -> list:
+    body = {
+        "input": q,
+        "includedRegionCodes": ["gb"],
+        "languageCode": "en-GB",
+        "regionCode": "GB",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
+    }
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        r = await client.post("https://places.googleapis.com/v1/places:autocomplete", json=body, headers=headers)
+    if r.status_code >= 400:
+        logger.warning(f"Google Places autocomplete {r.status_code}: {r.text[:200]}")
+        r.raise_for_status()
+    out = []
+    for item in r.json().get("suggestions", []):
+        p = item.get("placePrediction")
+        if not p:
+            continue
+        label = (p.get("text") or {}).get("text", "")
+        if label:
+            out.append({"label": label, "place_id": p.get("placeId")})
+    return out
+
+
+@api_router.get("/address/suggest")
+async def address_suggest(q: str = Query("", min_length=0)):
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    if GOOGLE_MAPS_API_KEY:
+        try:
+            res = await _google_suggest(q)
+            if res:
+                return res
+        except Exception as e:
+            logger.warning(f"Address suggest fell back to mock: {e}")
+    return _mock_suggest(q)
 
 
 # ---------------------------------------------------------------------------
@@ -747,20 +789,32 @@ async def instant_offers(booking_id: str, user: dict = Depends(get_current_user)
         vs = d.get("van_size")
         return bool(vs) and van_rank(vs) > van_rank(req)
 
-    for radius in (INSTANT_RADIUS_MI, INSTANT_RADIUS_EXPANDED_MI):
+    async def build(pool, fallback):
+        pool = sorted(pool, key=lambda d: d["_dist"])[:5]
+        offers = [await _offer_for(d, b, offered_size=(d["van_size"] if fallback else None)) for d in pool]
+        offers = _tag_offers(sorted(offers, key=lambda o: o["price"]))
+        radius = max((int(round(d["_dist"])) for d in pool), default=INSTANT_RADIUS_MI)
+        return {"radius_mi": max(radius, INSTANT_RADIUS_MI), "van_fallback": fallback,
+                "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": offers}
+
+    # Prefer closest exact-size drivers within a widening radius, else larger-van fallback.
+    for radius in (INSTANT_RADIUS_MI, INSTANT_RADIUS_EXPANDED_MI, BIDDING_RADIUS_MI):
         pool = [d for d in drivers if d["_dist"] <= radius]
         exact = [d for d in pool if can_exact(d)]
         if exact:
-            offers = [await _offer_for(d, b) for d in exact]
-            offers = _tag_offers(sorted(offers, key=lambda o: o["price"]))[:5]
-            return {"radius_mi": radius, "van_fallback": False, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": offers}
+            return await build(exact, False)
         bigger = [d for d in pool if can_bigger(d)]
         if bigger:
-            offers = [await _offer_for(d, b, offered_size=d["van_size"]) for d in bigger]
-            offers = _tag_offers(sorted(offers, key=lambda o: o["price"]))[:5]
-            return {"radius_mi": radius, "van_fallback": True, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": offers}
+            return await build(bigger, True)
 
-    return {"radius_mi": INSTANT_RADIUS_EXPANDED_MI, "van_fallback": False, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": []}
+    # No driver within 20 mi — still show the closest available drivers so a quote always appears.
+    exact_any = [d for d in drivers if can_exact(d)]
+    if exact_any:
+        return await build(exact_any, False)
+    bigger_any = [d for d in drivers if can_bigger(d)]
+    if bigger_any:
+        return await build(bigger_any, True)
+    return {"radius_mi": BIDDING_RADIUS_MI, "van_fallback": False, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": []}
 
 
 @api_router.post("/bookings/{booking_id}/broadcast")
