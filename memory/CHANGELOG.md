@@ -29,3 +29,14 @@
   fallback) so a cost always appears. Verified via curl (5 offers returned).
 - Book page: for logged-in customers, /book hides the top navbar on mobile and shows
   the bottom nav (Book/My Jobs/Messages/Account); public visitors still see full navbar.
+
+## 2026-06 — Real Google geocoding for distances & quotes
+- geocode() now uses Google Places Text Search (New) (the Geocoding API was not authorized
+  for the key; Places Text Search is, and returns accurate coords). Results cached in Mongo
+  (geocache collection) to limit API calls.
+- Booking creation geocodes pickup+dropoff -> stores real pickup_coords/dropoff_coords and a
+  real journey distance (haversine) feeding compute_quote. Driver registration geocodes
+  home_postcode -> real base_coords. driver_dist(profile,booking) = haversine(base_coords,
+  pickup_coords), falling back to simulated for legacy records.
+- Verified: Camden->Islington 1.7mi, London->Leeds 169mi; driver NW1 8NH -> real Camden coords.
+- ACTION: GOOGLE_MAPS_API_KEY must be in PRODUCTION secrets for live geocoding/autocomplete.

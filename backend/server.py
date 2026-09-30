@@ -133,8 +133,26 @@ def pseudo_distance(pickup: str, dropoff: str) -> float:
 
 
 def driver_distance_mi(base_postcode: str, pickup: str) -> float:
-    """Deterministic simulated distance (0.5–34 mi) from a driver's home base to a pickup."""
+    """Deterministic simulated distance (0.5–34 mi) — fallback for records without coords."""
     return round(0.5 + _hash_float("dist", base_postcode or "", pickup) * 33.5, 1)
+
+
+def haversine_mi(a: dict, b: dict):
+    if not a or not b or "lat" not in a or "lat" not in b:
+        return None
+    R = 3958.8
+    lat1, lng1, lat2, lng2 = map(radians, [a["lat"], a["lng"], b["lat"], b["lng"]])
+    dlat, dlng = lat2 - lat1, lng2 - lng1
+    h = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
+    return round(2 * R * atan2(sqrt(h), sqrt(1 - h)), 1)
+
+
+def driver_dist(profile: dict, booking: dict) -> float:
+    """Real driver→pickup distance from stored geocoded coords; falls back to simulated."""
+    d = haversine_mi(profile.get("base_coords"), booking.get("pickup_coords"))
+    if d is not None:
+        return d
+    return driver_distance_mi(profile.get("home_postcode", ""), booking.get("pickup", ""))
 
 
 def driver_rating(uid: str) -> float:
@@ -154,11 +172,12 @@ def estimated_hours(distance, van_size, pf, df, needs_helper=False, heavy_items=
 
 
 def compute_quote(pickup, dropoff, van_size, date, time,
-                  pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True, heavy_items=False):
+                  pickup_floor=0, dropoff_floor=0, pickup_lift=True, dropoff_lift=True, heavy_items=False,
+                  distance_override=None):
     van = VAN_BY_ID.get(van_size)
     if not van:
         raise HTTPException(status_code=400, detail="Invalid van size")
-    distance = pseudo_distance(pickup, dropoff)
+    distance = distance_override if (distance_override is not None and distance_override > 0) else pseudo_distance(pickup, dropoff)
     hours = estimated_hours(distance, van_size, pickup_floor, dropoff_floor, heavy_items=heavy_items)
     est = round(van["rate_min"] * hours, 2)
     return {
@@ -463,7 +482,7 @@ async def driver_register(data: DriverRegisterInput, response: Response):
         "user_id": user["user_id"], "name": data.name.strip(), "phone": data.phone,
         "vehicle": data.vehicle.strip(), "licence_no": data.licence_no.strip(),
         "insurance_no": data.insurance_no.strip(), "mot_expiry": data.mot_expiry,
-        "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
+        "home_postcode": data.home_postcode.strip(), "base_coords": await resolve_coords(data.home_postcode),
         "address": (data.address or "").strip() or None,
         "van_size": data.van_size if data.van_size in VAN_ORDER else None,
         "profile_photo": None, "van_photo": None, "licence_photo": None, "insurance_photo": None,
@@ -574,8 +593,12 @@ async def validate_promo(code: str):
 
 @api_router.post("/quote")
 async def quote(data: QuoteInput):
+    pcoords = await resolve_coords(data.pickup)
+    dcoords = await resolve_coords(data.dropoff)
+    dist = haversine_mi(pcoords, dcoords)
     return compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
-                         data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items)
+                         data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
+                         distance_override=dist)
 
 
 _STREETS = ["High Street", "Church Road", "Station Road", "Victoria Road", "Green Lane",
@@ -584,6 +607,43 @@ _TOWNS = ["London", "Manchester", "Birmingham", "Leeds", "Bristol", "Liverpool"]
 
 
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+
+
+async def geocode(address: str):
+    """Resolve an address/postcode to {lat,lng} via Google Places Text Search, cached in Mongo."""
+    address = (address or "").strip()
+    if not address or not GOOGLE_MAPS_API_KEY:
+        return None
+    key = address.lower()
+    cached = await db.geocache.find_one({"q": key}, {"_id": 0})
+    if cached:
+        return cached.get("coords")
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+            "X-Goog-FieldMask": "places.location",
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post("https://places.googleapis.com/v1/places:searchText",
+                                  json={"textQuery": address, "regionCode": "GB"}, headers=headers)
+        if r.status_code >= 400:
+            logger.warning(f"Places text search {r.status_code}: {r.text[:200]}")
+            return None
+        places = (r.json() or {}).get("places") or []
+        if not places:
+            return None
+        loc = places[0]["location"]
+        coords = {"lat": round(loc["latitude"], 6), "lng": round(loc["longitude"], 6)}
+        await db.geocache.update_one({"q": key}, {"$set": {"q": key, "coords": coords}}, upsert=True)
+        return coords
+    except Exception as e:
+        logger.warning(f"Geocode failed for {address!r}: {e}")
+        return None
+
+
+async def resolve_coords(address: str):
+    return (await geocode(address)) or pseudo_coords(address)
 
 
 def _mock_suggest(q: str) -> list:
@@ -686,8 +746,12 @@ def strip_booking(b: dict) -> dict:
 
 @api_router.post("/bookings")
 async def create_booking(data: BookingInput, user: dict = Depends(get_current_user)):
+    pcoords = await resolve_coords(data.pickup)
+    dcoords = await resolve_coords(data.dropoff)
+    journey_mi = haversine_mi(pcoords, dcoords)
     q = compute_quote(data.pickup, data.dropoff, data.van_size, data.date, data.time,
-                      data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items)
+                      data.pickup_floor, data.dropoff_floor, data.pickup_lift, data.dropoff_lift, data.heavy_items,
+                      distance_override=journey_mi)
     now = datetime.now(timezone.utc).isoformat()
     promo_code = (data.promo_code or "").strip().upper()
     promo = PROMO_CODES.get(promo_code)
@@ -696,7 +760,7 @@ async def create_booking(data: BookingInput, user: dict = Depends(get_current_us
         "customer_name": data.customer_name.strip(), "customer_email": user["email"],
         "customer_phone": data.customer_phone.strip(),
         "pickup": data.pickup.strip(), "pickup_flat": data.pickup_flat, "dropoff": data.dropoff.strip(),
-        "pickup_coords": pseudo_coords(data.pickup), "dropoff_coords": pseudo_coords(data.dropoff),
+        "pickup_coords": pcoords, "dropoff_coords": dcoords,
         "pickup_floor": data.pickup_floor, "dropoff_floor": data.dropoff_floor,
         "pickup_lift": data.pickup_lift, "dropoff_lift": data.dropoff_lift, "needs_helper": data.needs_helper,
         "heavy_items": data.heavy_items,
@@ -747,7 +811,7 @@ async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
 async def _offer_for(profile: dict, booking: dict, offered_size: str = None) -> dict:
     size = offered_size or booking["van_size"]
     price, hours = driver_job_price(profile, booking, van_override=size)
-    dist = driver_distance_mi(profile.get("home_postcode", ""), booking["pickup"])
+    dist = driver_dist(profile, booking)
     return {
         "driver_id": profile["user_id"], "name": profile["name"], "vehicle": profile["vehicle"],
         "rating": profile.get("rating", 5.0), "reviews": profile.get("reviews", 0),
@@ -779,7 +843,7 @@ async def instant_offers(booking_id: str, user: dict = Depends(get_current_user)
     req = b["van_size"]
     drivers = await db.driver_profiles.find({"status": "approved", "availability": "available"}, {"_id": 0}).to_list(500)
     for d in drivers:
-        d["_dist"] = driver_distance_mi(d.get("home_postcode", ""), b["pickup"])
+        d["_dist"] = driver_dist(d, b)
 
     def can_exact(d):
         vs = d.get("van_size")
@@ -826,7 +890,7 @@ async def broadcast_bidding(booking_id: str, user: dict = Depends(get_current_us
     drivers = await db.driver_profiles.find({"status": "approved"}, {"_id": 0}).to_list(500)
     notified = 0
     for d in drivers:
-        dist = driver_distance_mi(d.get("home_postcode", ""), b["pickup"])
+        dist = driver_dist(d, b)
         if dist <= BIDDING_RADIUS_MI:
             notified += 1
             await db.notifications.insert_one({
@@ -858,7 +922,7 @@ async def booking_bids(booking_id: str, user: dict = Depends(get_current_user)):
         out.append({
             "driver_id": bid["driver_id"], "name": prof["name"], "vehicle": prof["vehicle"],
             "rating": prof.get("rating", 5.0), "reviews": prof.get("reviews", 0),
-            "price": bid["price"], "distance_mi": driver_distance_mi(prof.get("home_postcode", ""), b["pickup"]),
+            "price": bid["price"], "distance_mi": driver_dist(prof, b),
             "created_at": bid["created_at"],
         })
     return _tag_offers(sorted(out, key=lambda o: o["price"]))
@@ -1150,7 +1214,7 @@ async def create_driver(data: DriverInput, user: dict = Depends(require_admin)):
     await db.users.insert_one(u)
     profile = {"user_id": u["user_id"], "name": data.name.strip(), "phone": data.phone.strip(),
                "vehicle": data.vehicle.strip(), "licence_no": "-", "insurance_no": "-", "mot_expiry": None,
-               "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
+               "home_postcode": data.home_postcode.strip(), "base_coords": await resolve_coords(data.home_postcode),
                "pricing": default_pricing(), "rating": driver_rating(u["user_id"]), "reviews": driver_reviews(u["user_id"]),
                "status": "approved", "availability": "available",
                "created_at": datetime.now(timezone.utc).isoformat()}
@@ -1294,7 +1358,7 @@ async def driver_available_jobs(user: dict = Depends(require_driver)):
     bid_ids = {b["booking_id"] for b in my_bids}
     out = []
     for j in open_jobs:
-        dist = driver_distance_mi(prof.get("home_postcode", ""), j["pickup"])
+        dist = driver_dist(prof, j)
         if dist <= BIDDING_RADIUS_MI and j["booking_id"] not in bid_ids:
             suggested, hours = driver_job_price(prof, j)
             out.append({**j, "distance_mi": dist, "suggested_price": suggested, "est_hours": hours})
