@@ -162,12 +162,20 @@ export default function MyJobs() {
 
             {/* Offers list */}
             {mode === "instant" ? (
-              <OfferList offers={offers?.offers} loading={offers === null} note={offers && !offers.exact_radius ? "Nearest drivers (just outside 5 miles)" : `Drivers within ${offers?.radius_mi || 5} miles`}
-                onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
+              <div className="space-y-3">
+                {offers?.van_fallback && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3" data-testid="van-fallback-banner">
+                    <p className="text-sm font-semibold text-amber-800">No {offers.requested_van_name} nearby right now</p>
+                    <p className="text-xs text-amber-700 mt-0.5">We couldn't find a {offers.requested_van_name} in your area, so here are larger vans that can still do your move — take a look below.</p>
+                  </div>
+                )}
+                <OfferList offers={offers?.offers} loading={offers === null} note={`Drivers within ${offers?.radius_mi || 5} miles`}
+                  onAccept={accept} onChat={setChat} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
+              </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Incoming bids (within 30 mi)</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Incoming bids (within 20 mi)</p>
                   <Button size="sm" variant="outline" onClick={broadcast} disabled={broadcasting} data-testid="rebroadcast" className="h-8 gap-1.5"><Radio className="h-3.5 w-3.5" /> {broadcasting ? "Sending…" : "Notify drivers"}</Button>
                 </div>
                 {bids.length === 0
@@ -250,6 +258,7 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
                 {o.tags?.includes("cheapest") && <Badge className="bg-amber-100 text-amber-700 border-0">Cheapest</Badge>}
                 <span className="text-sm text-slate-500 flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {o.rating?.toFixed(1)}</span>
                 <span className="text-sm text-slate-400">· {o.distance_mi} mi away</span>
+                {o.offered_van_name && <Badge className="bg-violet-100 text-violet-700 border-0" data-testid={`offered-van-${o.driver_id}`}>{o.offered_van_name}</Badge>}
                 <button onClick={() => onProfile(o)} className="text-sm text-primary hover:underline" data-testid={`profile-${o.driver_id}`}>· View profile</button>
               </div>
             </div>

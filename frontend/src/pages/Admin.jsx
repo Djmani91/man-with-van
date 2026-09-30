@@ -6,6 +6,7 @@ import {
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Seo } from "@/components/Seo";
+import { TrackingMap } from "@/components/TrackingMap";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ export default function Admin() {
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [driverSearch, setDriverSearch] = useState("");
+  const [job, setJob] = useState(null);
 
   const load = useCallback(async () => {
     const [s, b, d] = await Promise.all([api.get("/admin/stats"), api.get("/admin/bookings"), api.get("/admin/drivers")]);
@@ -94,13 +96,13 @@ export default function Admin() {
                 <TableBody>
                   {bookings.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">No bookings yet.</TableCell></TableRow>}
                   {bookings.map((b) => (
-                    <TableRow key={b.booking_id} data-testid={`admin-row-${b.booking_id}`}>
+                    <TableRow key={b.booking_id} data-testid={`admin-row-${b.booking_id}`} onClick={() => setJob(b)} className="cursor-pointer hover:bg-slate-50">
                       <TableCell className="font-mono text-xs font-semibold">{b.booking_id}</TableCell>
                       <TableCell className="text-xs max-w-[180px] truncate">{b.pickup} → {b.dropoff}</TableCell>
                       <TableCell className="text-xs whitespace-nowrap">{b.date} {b.time}</TableCell>
                       <TableCell className="text-xs">{b.van_name}</TableCell>
                       <TableCell className="font-semibold text-sm">{b.price ? `£${b.price.toFixed(0)}` : "—"}</TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
                         {b.driver ? b.driver.name : (
                           <Select onValueChange={(v) => assign(b.booking_id, v)}>
                             <SelectTrigger className="h-8 w-[140px] text-xs" data-testid={`assign-${b.booking_id}`}><SelectValue placeholder="Assign driver" /></SelectTrigger>
@@ -156,6 +158,7 @@ export default function Admin() {
             </div>
           </TabsContent>
         </Tabs>
+        {job && <AdminJobModal booking={job} onClose={() => setJob(null)} />}
       </div>
     </div>
   );
@@ -170,6 +173,66 @@ const Stat = ({ icon: Icon, label, value, accent }) => (
     <p className={`font-heading text-2xl font-bold mt-2 ${accent ? "text-white" : "text-slate-900"}`}>{value}</p>
   </div>
 );
+
+function AdminJobModal({ booking: b, onClose }) {
+  const [messages, setMessages] = useState(null);
+  useEffect(() => {
+    api.get(`/bookings/${b.booking_id}/messages`).then(({ data }) => setMessages(data)).catch(() => setMessages([]));
+  }, [b.booking_id]);
+
+  const mid = b.pickup_coords && b.dropoff_coords
+    ? { lat: (b.pickup_coords.lat + b.dropoff_coords.lat) / 2, lng: (b.pickup_coords.lng + b.dropoff_coords.lng) / 2 }
+    : b.pickup_coords;
+  const pay = b.payment || {};
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="admin-job-modal" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-mono text-base">{b.booking_id}
+            <Badge className={`${STATUS_STYLE[b.status]} border-0`}>{STATUS_LABEL[b.status]}</Badge>
+          </DialogTitle>
+          <DialogDescription>{b.date} at {b.time} · {b.van_name}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {b.pickup_coords && b.dropoff_coords && (
+            <TrackingMap pickup={b.pickup_coords} dropoff={b.dropoff_coords} driver={mid} />
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Pickup</p><p className="text-slate-800">{b.pickup}{b.pickup_flat ? `, ${b.pickup_flat}` : ""}</p><p className="text-xs text-slate-500">Floor {b.pickup_floor ?? 0} · {b.pickup_lift ? "Lift" : "Stairs"}</p></div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Drop-off</p><p className="text-slate-800">{b.dropoff}</p><p className="text-xs text-slate-500">Floor {b.dropoff_floor ?? 0} · {b.dropoff_lift ? "Lift" : "Stairs"}</p></div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Customer</p><p className="text-slate-800">{b.customer_name}</p><p className="text-xs text-slate-500">{b.customer_phone} · {b.customer_email}</p></div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Driver</p><p className="text-slate-800">{b.driver ? b.driver.name : "Not assigned"}</p>{b.driver && <p className="text-xs text-slate-500">{b.driver.phone} · {b.driver.vehicle}</p>}</div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Price</p><p className="text-slate-800 font-semibold">{b.price ? `£${b.price.toFixed(2)}` : "—"}</p>{pay.status === "paid" && <p className="text-xs text-emerald-600">{pay.type === "deposit" ? "Deposit paid" : "Paid in full"}{pay.credit_applied ? ` · £${pay.credit_applied} credit` : ""}{b.promo_code ? ` · ${b.promo_code}` : ""}</p>}</div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Extras</p><p className="text-xs text-slate-600">{[b.needs_helper && "Helper", b.heavy_items && "Heavy items", b.mode].filter(Boolean).join(" · ") || "—"}</p></div>
+          </div>
+
+          {b.items && <div className="text-sm"><p className="text-xs uppercase tracking-wide text-slate-400">Items</p><p className="text-slate-700">{b.items}</p></div>}
+          {b.notes && <div className="text-sm"><p className="text-xs uppercase tracking-wide text-slate-400">Notes</p><p className="text-slate-700">{b.notes}</p></div>}
+
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Customer ↔ Driver chat</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 max-h-64 overflow-y-auto space-y-2" data-testid="admin-chat-thread">
+              {messages === null && <p className="text-xs text-slate-400 text-center py-4">Loading messages…</p>}
+              {messages?.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No messages yet — chat opens once a driver is engaged.</p>}
+              {messages?.map((m) => (
+                <div key={m.id} className={`flex ${m.sender_role === "customer" ? "justify-start" : "justify-end"}`}>
+                  <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${m.sender_role === "customer" ? "bg-white border border-slate-200 text-slate-800" : "bg-primary text-white"}`}>
+                    <p className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">{m.sender_name} · {m.sender_role}</p>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">Contact details are auto-hidden in chat until the customer pays.</p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function AddDriverDialog({ onAdded }) {
   const [open, setOpen] = useState(false);

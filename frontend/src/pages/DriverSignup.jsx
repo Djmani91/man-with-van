@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export default function DriverSignup() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", address: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", vehicle: "", van_size: "large", licence_no: "", insurance_no: "", mot_expiry: "", home_postcode: "", address: "", rate_small: 35, rate_medium: 40, rate_large: 45, rate_xl: 50, stairs_fee: 5, helper_rate: 15 });
   const [files, setFiles] = useState({ profile_photo: null, van_photo: null, licence_photo: null, insurance_photo: null });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ export default function DriverSignup() {
     try {
       const payload = {
         name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password,
-        vehicle: form.vehicle.trim(), licence_no: form.licence_no.trim(), insurance_no: form.insurance_no.trim(),
+        vehicle: form.vehicle.trim(), van_size: form.van_size, licence_no: form.licence_no.trim(), insurance_no: form.insurance_no.trim(),
         mot_expiry: form.mot_expiry || null, home_postcode: form.home_postcode.trim(), address: form.address.trim(),
         pricing: {
           rates: { small: num(form.rate_small, 35), medium: num(form.rate_medium, 40), large: num(form.rate_large, 45), xl: num(form.rate_xl, 50) },
@@ -87,6 +87,17 @@ export default function DriverSignup() {
           <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} data-testid="ds-email" /></div>
           <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={set("password")} data-testid="ds-password" /></div>
           <div className="space-y-2"><Label>Vehicle</Label><Input value={form.vehicle} onChange={set("vehicle")} placeholder="Large Luton — AB12 CDE" data-testid="ds-vehicle" /></div>
+          <div className="space-y-2">
+            <Label>Your van size</Label>
+            <select value={form.van_size} onChange={set("van_size")} data-testid="ds-van-size"
+              className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+              <option value="small">Small Van</option>
+              <option value="medium">Medium Van (SWB)</option>
+              <option value="large">Large Luton Van</option>
+              <option value="xl">Luton XL</option>
+            </select>
+            <p className="text-xs text-slate-400">A bigger van can also take smaller jobs, so you'll get more work.</p>
+          </div>
           <div className="space-y-2"><Label>Home base postcode</Label><Input value={form.home_postcode} onChange={set("home_postcode")} placeholder="e.g. M1 1AA — used to find jobs near you" data-testid="ds-home" /></div>
           <div className="space-y-2"><Label>Home address <span className="text-slate-400 font-normal">(optional)</span></Label><Input value={form.address} onChange={set("address")} placeholder="Street, city" data-testid="ds-address" /></div>
           <div className="grid sm:grid-cols-2 gap-4">

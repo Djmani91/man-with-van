@@ -50,7 +50,13 @@ api_router = APIRouter(prefix="/api")
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 INSTANT_RADIUS_MI = 5
-BIDDING_RADIUS_MI = 30
+INSTANT_RADIUS_EXPANDED_MI = 10
+BIDDING_RADIUS_MI = 20
+VAN_ORDER = ["small", "medium", "large", "xl"]
+
+
+def van_rank(v: str) -> int:
+    return VAN_ORDER.index(v) if v in VAN_ORDER else 0
 DEPOSIT_PCT = 0.15
 PROMO_CODES = {"STUDENT10": {"pct": 0.10, "label": "Student 10% off"}}
 REFERRAL_REWARD = 5.0  # £ credit for referrer and friend on friend's first paid booking
@@ -162,8 +168,8 @@ def compute_quote(pickup, dropoff, van_size, date, time,
     }
 
 
-def driver_job_price(profile: dict, booking: dict):
-    van = booking["van_size"]
+def driver_job_price(profile: dict, booking: dict, van_override: str = None):
+    van = van_override or booking["van_size"]
     pricing = profile.get("pricing") or default_pricing()
     rate = pricing["rates"].get(van, VAN_BY_ID[van]["rate_min"])
     hours = estimated_hours(booking["distance_miles"], van, booking.get("pickup_floor", 0),
@@ -308,6 +314,7 @@ class DriverRegisterInput(BaseModel):
     mot_expiry: Optional[str] = None
     home_postcode: str
     address: Optional[str] = None
+    van_size: Optional[str] = None
     pricing: Optional[PricingInput] = None
 
 
@@ -429,6 +436,7 @@ async def driver_register(data: DriverRegisterInput, response: Response):
         "insurance_no": data.insurance_no.strip(), "mot_expiry": data.mot_expiry,
         "home_postcode": data.home_postcode.strip(), "base_coords": pseudo_coords(data.home_postcode),
         "address": (data.address or "").strip() or None,
+        "van_size": data.van_size if data.van_size in VAN_ORDER else None,
         "profile_photo": None, "van_photo": None, "licence_photo": None, "insurance_photo": None,
         "pricing": pricing, "rating": driver_rating(user["user_id"]), "reviews": driver_reviews(user["user_id"]),
         "status": "pending", "availability": "available",
@@ -658,13 +666,15 @@ async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
     return mask_contact_for_customer(b)
 
 
-async def _offer_for(profile: dict, booking: dict) -> dict:
-    price, hours = driver_job_price(profile, booking)
+async def _offer_for(profile: dict, booking: dict, offered_size: str = None) -> dict:
+    size = offered_size or booking["van_size"]
+    price, hours = driver_job_price(profile, booking, van_override=size)
     dist = driver_distance_mi(profile.get("home_postcode", ""), booking["pickup"])
     return {
         "driver_id": profile["user_id"], "name": profile["name"], "vehicle": profile["vehicle"],
         "rating": profile.get("rating", 5.0), "reviews": profile.get("reviews", 0),
         "price": price, "hours": hours, "distance_mi": dist,
+        "offered_van_size": size, "offered_van_name": VAN_BY_ID.get(size, {}).get("name", size),
     }
 
 
@@ -688,12 +698,33 @@ async def instant_offers(booking_id: str, user: dict = Depends(get_current_user)
     b = await db.bookings.find_one({"booking_id": booking_id}, {"_id": 0})
     if not b or b["user_id"] != user["user_id"]:
         raise HTTPException(status_code=404, detail="Booking not found")
+    req = b["van_size"]
     drivers = await db.driver_profiles.find({"status": "approved", "availability": "available"}, {"_id": 0}).to_list(500)
-    offers = [await _offer_for(d, b) for d in drivers]
-    within = [o for o in offers if o["distance_mi"] <= INSTANT_RADIUS_MI]
-    result = within if within else sorted(offers, key=lambda o: o["distance_mi"])[:3]
-    result = _tag_offers(sorted(result, key=lambda o: o["price"]))
-    return {"radius_mi": INSTANT_RADIUS_MI, "exact_radius": bool(within), "offers": result}
+    for d in drivers:
+        d["_dist"] = driver_distance_mi(d.get("home_postcode", ""), b["pickup"])
+
+    def can_exact(d):
+        vs = d.get("van_size")
+        return (not vs) or vs == req  # legacy drivers (no van_size) can quote any size
+
+    def can_bigger(d):
+        vs = d.get("van_size")
+        return bool(vs) and van_rank(vs) > van_rank(req)
+
+    for radius in (INSTANT_RADIUS_MI, INSTANT_RADIUS_EXPANDED_MI):
+        pool = [d for d in drivers if d["_dist"] <= radius]
+        exact = [d for d in pool if can_exact(d)]
+        if exact:
+            offers = [await _offer_for(d, b) for d in exact]
+            offers = _tag_offers(sorted(offers, key=lambda o: o["price"]))[:5]
+            return {"radius_mi": radius, "van_fallback": False, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": offers}
+        bigger = [d for d in pool if can_bigger(d)]
+        if bigger:
+            offers = [await _offer_for(d, b, offered_size=d["van_size"]) for d in bigger]
+            offers = _tag_offers(sorted(offers, key=lambda o: o["price"]))[:5]
+            return {"radius_mi": radius, "van_fallback": True, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": offers}
+
+    return {"radius_mi": INSTANT_RADIUS_EXPANDED_MI, "van_fallback": False, "requested_van_name": VAN_BY_ID.get(req, {}).get("name", req), "offers": []}
 
 
 @api_router.post("/bookings/{booking_id}/broadcast")
