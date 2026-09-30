@@ -97,3 +97,9 @@
   - POST /api/driver/jobs/{id}/accept: atomic first-come claim; payment carries over (no new charge); whoever accepts first wins, others get "just been taken".
   - Driver UI: fixed jobs show an "Accept job (£earnings)" button instead of a bid input; detail view shows "Fixed price" priority badge + Accept.
 - Verified via curl: cancel escalation 1/2/3 (warning/24h/48h), cancel→fixed conversion, B sees fixed £60 (earns £51, 30mi), B accepts, A gets "taken".
+
+## 2026-06 — Booking form mandatory fields + reference-match driver detail
+- DriverJobDetail.jsx: matched user reference screenshots — heading renamed "Notes & photo"; accept-job screen now shows full "Earnings breakdown — Customer pays / Your earnings" block above Accept/Decline (Accept styled primary/purple).
+- BookingWizard.jsx: ALL customer booking fields now mandatory — "What are we moving?" items list, at least ONE photo, and Notes are required (Continue/Confirm disabled until filled). Addresses/date/time/van/name/phone already required.
+- Sign-in / register now happens at the END via an inline modal (booking-auth-modal) inside the wizard — no navigation away — so uploaded photos are NOT lost. Guests fill everything (photos held locally as File objects), then register/login in the modal; on success photos upload and booking is created, navigates to /jobs.
+- Verified: iteration_15.json — 100% backend + frontend. Photos confirmed persisted (non-empty) after sign-in-at-end. Logged-in customers skip the modal.

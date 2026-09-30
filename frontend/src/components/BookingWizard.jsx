@@ -16,7 +16,7 @@ import { getPromo, loadPromo, savePromo, clearPromo } from "@/lib/promo";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const STEPS = ["Addresses", "Floors", "Date & time", "Van", "Photos & items", "Contact"];
@@ -373,6 +373,7 @@ export const BookingWizard = ({ compact = true }) => {
         <DialogContent className="sm:max-w-md" data-testid="booking-auth-modal">
           <DialogHeader>
             <DialogTitle className="font-heading">{authMode === "login" ? "Sign in to confirm" : "Create your account to confirm"}</DialogTitle>
+            <DialogDescription>Your move details and photos are saved — just {authMode === "login" ? "sign in" : "register"} to place your booking.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {authMode === "register" && (

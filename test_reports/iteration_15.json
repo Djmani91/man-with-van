@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 15: Verified mandatory field gating on BookingWizard (items+>=1 photo on step 5, name+phone+notes on step 6), inline auth-at-end modal, and that photos survive the sign-in-at-end step. Backend + full frontend flows (guest register-at-end and logged-in customer) all pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "booking-auth-modal (Radix Dialog)", "issues": ["Console warning: Missing Description or aria-describedby for DialogContent — accessibility only, not blocking"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_booking_photos_flow.py", "/app/test_reports/pytest/iter15_booking.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BookingWizard.jsx is now 400+ lines with modal, form, autocomplete, quote logic — consider splitting the auth modal into its own component for maintainability.",
+    "submitBooking uploads previews one-by-one sequentially in a for loop; could parallelize with Promise.all for faster confirm when >1 photo.",
+    "If uploadPhotos fails midway, some files are uploaded (and stored server-side) but the booking is never created — orphan uploads. Minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_booking_photos_flow.py"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (all validation + flows verified)"},
+  "test_credentials": "customer@example.com / Customer#2026 works. New guest registered mid-test: bookflow_<random>@example.com / Book#2026",
+  "seed_data_creation": "Created ~2 bookings for customer@example.com and 1 for a random bookflow_* guest during testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Booking wizard now enforces items+photo on step5 and name+phone+notes on step6. Guests trigger booking-auth-modal at confirm; on register/login submitBooking() uploads previews and posts to /api/bookings. Verified photos array is persisted (non-empty) in the resulting booking. AddressAutocomplete suggestion selector is [data-testid=\"wizard-pickup-option-0\"]/[data-testid=\"wizard-dropoff-option-0\"]."
+}
