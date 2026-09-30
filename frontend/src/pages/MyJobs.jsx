@@ -66,7 +66,20 @@ export default function MyJobs() {
     finally { setBroadcasting(false); }
   };
 
-  const accept = (driverId, price) => {
+  const accept = async (driverId, price) => {
+    if (active?.payment?.status === "paid") {
+      // Reassignment after a change-driver — no new payment needed.
+      setAccepting(driverId);
+      try {
+        await api.post(`/bookings/${active.booking_id}/select-driver`, { driver_id: driverId });
+        toast.success("New driver confirmed!");
+        const fresh = await load();
+        const b = fresh.find((x) => x.booking_id === active.booking_id);
+        if (b) navigate(`/track/${b.booking_id}`);
+      } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+      finally { setAccepting(null); }
+      return;
+    }
     setPayFor({ driverId, price });
   };
 

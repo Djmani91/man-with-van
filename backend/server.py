@@ -376,8 +376,16 @@ class AvailabilityInput(BaseModel):
 
 class SelectDriverInput(BaseModel):
     driver_id: str
-    payment_type: str  # "deposit" | "full"
-    source_id: str  # single-use card token from Square Web Payments SDK
+    payment_type: str = "full"  # "deposit" | "full" (ignored on reassignment)
+    source_id: str = ""  # single-use card token; empty for reassignment (already paid)
+
+
+class CancelInput(BaseModel):
+    reason: str
+
+
+class ChangeDriverInput(BaseModel):
+    reason: str
 
 
 class BidInput(BaseModel):
@@ -824,45 +832,55 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
 
     if payment_type not in ("deposit", "full"):
         raise HTTPException(status_code=400, detail="Invalid payment type")
-    promo_code = b.get("promo_code")
-    promo_pct = b.get("promo_discount_pct") or 0.0
-    original_price = round(price, 2)
-    discount_amount = round(original_price * promo_pct, 2) if promo_pct else 0.0
-    price = round(original_price - discount_amount, 2)
-    deposit = round(price * DEPOSIT_PCT, 2)
-    amount = deposit if payment_type == "deposit" else price
-
-    # Apply the customer's referral credit against what's charged now (after promo).
-    customer = await db.users.find_one({"user_id": customer_id})
-    available_credit = round((customer or {}).get("referral_credit", 0.0), 2)
-    credit_applied = min(available_credit, amount)
-    if amount - credit_applied < MIN_CARD_CHARGE:
-        credit_applied = round(max(0.0, amount - MIN_CARD_CHARGE), 2)
-    charge_amount = round(amount - credit_applied, 2)
-
-    square_payment_id = await _charge_square(charge_amount, booking_id, payment_type, source_id)
-
-    # Deduct the credit that was used.
-    if credit_applied > 0:
-        await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": -credit_applied}})
-    # Reward both parties on the friend's first paid booking.
-    if customer and customer.get("referred_by") and not customer.get("referral_rewarded"):
-        await db.users.update_one({"user_id": customer["referred_by"]}, {"$inc": {"referral_credit": REFERRAL_REWARD}})
-        await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": REFERRAL_REWARD}, "$set": {"referral_rewarded": True}})
 
     now = datetime.now(timezone.utc).isoformat()
-    timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
-                {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
+    already_paid = (b.get("payment") or {}).get("status") == "paid"
+
+    if already_paid:
+        # Reassignment after a "change driver" request — payment stays, no new charge.
+        price = b.get("price") or round(price, 2)
+        payment = b["payment"]
+        timeline = (b.get("timeline") or []) + [{"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
+    else:
+        promo_code = b.get("promo_code")
+        promo_pct = b.get("promo_discount_pct") or 0.0
+        original_price = round(price, 2)
+        discount_amount = round(original_price * promo_pct, 2) if promo_pct else 0.0
+        price = round(original_price - discount_amount, 2)
+        deposit = round(price * DEPOSIT_PCT, 2)
+        amount = deposit if payment_type == "deposit" else price
+
+        customer = await db.users.find_one({"user_id": customer_id})
+        available_credit = round((customer or {}).get("referral_credit", 0.0), 2)
+        credit_applied = min(available_credit, amount)
+        if amount - credit_applied < MIN_CARD_CHARGE:
+            credit_applied = round(max(0.0, amount - MIN_CARD_CHARGE), 2)
+        charge_amount = round(amount - credit_applied, 2)
+
+        if not source_id:
+            raise HTTPException(status_code=400, detail="Payment details required")
+        square_payment_id = await _charge_square(charge_amount, booking_id, payment_type, source_id)
+
+        if credit_applied > 0:
+            await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": -credit_applied}})
+        if customer and customer.get("referred_by") and not customer.get("referral_rewarded"):
+            await db.users.update_one({"user_id": customer["referred_by"]}, {"$inc": {"referral_credit": REFERRAL_REWARD}})
+            await db.users.update_one({"user_id": customer_id}, {"$inc": {"referral_credit": REFERRAL_REWARD}, "$set": {"referral_rewarded": True}})
+
+        payment = {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
+                   "balance_due": round(price - amount, 2), "paid_at": now,
+                   "transaction_id": square_payment_id, "provider": "square",
+                   "original_price": original_price, "promo_code": promo_code, "discount": discount_amount,
+                   "credit_applied": credit_applied, "card_charged": charge_amount}
+        timeline = [{"status": "confirmed", "label": STATUS_LABELS["confirmed"], "at": now},
+                    {"status": "assigned", "label": f"{prof['name']} assigned", "at": now}]
+
     await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
         "driver_id": driver_id,
         "driver": {"name": prof["name"], "phone": prof["phone"], "vehicle": prof["vehicle"],
                    "rating": prof.get("rating", 5.0)},
         "price": price, "status": "assigned",
-        "payment": {"status": "paid", "type": payment_type, "amount": amount, "deposit": deposit,
-                    "balance_due": round(price - amount, 2), "paid_at": now,
-                    "transaction_id": square_payment_id, "provider": "square",
-                    "original_price": original_price, "promo_code": promo_code, "discount": discount_amount,
-                    "credit_applied": credit_applied, "card_charged": charge_amount},
+        "payment": payment,
         "timeline": timeline, "mode": b.get("mode") or "instant",
     }})
     await db.driver_profiles.update_one({"user_id": driver_id}, {"$set": {"availability": "on_job"}})
@@ -884,6 +902,54 @@ async def _assign_and_pay(booking_id: str, driver_id: str, payment_type: str, so
 @api_router.post("/bookings/{booking_id}/select-driver")
 async def select_driver(booking_id: str, data: SelectDriverInput, user: dict = Depends(get_current_user)):
     return await _assign_and_pay(booking_id, data.driver_id, data.payment_type, data.source_id, user["user_id"])
+
+
+@api_router.post("/bookings/{booking_id}/cancel")
+async def cancel_booking(booking_id: str, data: CancelInput, user: dict = Depends(get_current_user)):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    if not b or b["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if b["status"] in ("completed", "cancelled"):
+        raise HTTPException(status_code=400, detail="This booking can no longer be cancelled")
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {"status": "cancelled", "cancel_reason": data.reason.strip(), "cancelled_at": now}
+    paid = (b.get("payment") or {}).get("status") == "paid"
+    if paid:
+        pay = dict(b["payment"])
+        pay["refund"] = {"status": "requested", "amount": pay.get("card_charged", pay.get("amount", 0)),
+                         "reason": data.reason.strip(), "requested_at": now}
+        updates["payment"] = pay
+    updates["timeline"] = (b.get("timeline") or []) + [{"status": "cancelled", "label": "Cancelled by customer", "at": now}]
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": updates})
+    if b.get("driver_id"):
+        await db.driver_profiles.update_one({"user_id": b["driver_id"]}, {"$set": {"availability": "available"}})
+    return {"status": "cancelled", "refund_requested": paid}
+
+
+@api_router.post("/bookings/{booking_id}/change-driver")
+async def change_driver(booking_id: str, data: ChangeDriverInput, user: dict = Depends(get_current_user)):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    if not b or b["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if b["status"] != "assigned" or not b.get("driver_id"):
+        raise HTTPException(status_code=400, detail="No assigned driver to change")
+    now = datetime.now(timezone.utc).isoformat()
+    prev_driver = b.get("driver_id")
+    reassignment = {"prev_driver_id": prev_driver, "prev_driver_name": (b.get("driver") or {}).get("name"),
+                    "reason": data.reason.strip(), "at": now}
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "status": "quoting", "driver_id": None, "driver": None,
+        "timeline": (b.get("timeline") or []) + [{"status": "quoting", "label": "Looking for a new driver", "at": now}],
+    }, "$push": {"reassignments": reassignment}})
+    # Free the previous driver and let them know.
+    if prev_driver:
+        await db.driver_profiles.update_one({"user_id": prev_driver}, {"$set": {"availability": "available"}})
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()), "driver_id": prev_driver, "booking_id": booking_id, "type": "job_reassigned",
+            "title": "A job was reassigned", "body": f"The customer chose to change driver ({data.reason.strip()}).",
+            "read": False, "created_at": now,
+        })
+    return {"status": "quoting", "message": "We're finding you another driver. This isn't guaranteed and may take a little longer, especially close to your move time."}
 
 
 def driver_position(b: dict):
@@ -1052,6 +1118,19 @@ async def admin_assign(booking_id: str, data: AssignInput, user: dict = Depends(
 @api_router.post("/admin/bookings/{booking_id}/status")
 async def update_status(booking_id: str, data: StatusInput, user: dict = Depends(require_admin)):
     return await _apply_status(booking_id, data.status)
+
+
+@api_router.post("/admin/bookings/{booking_id}/refund")
+async def process_refund(booking_id: str, user: dict = Depends(require_admin)):
+    b = await db.bookings.find_one({"booking_id": booking_id})
+    pay = (b or {}).get("payment") or {}
+    if not b or (pay.get("refund") or {}).get("status") != "requested":
+        raise HTTPException(status_code=400, detail="No refund to process for this booking")
+    now = datetime.now(timezone.utc).isoformat()
+    pay = dict(pay)
+    pay["refund"] = {**pay["refund"], "status": "refunded", "processed_at": now}
+    await db.bookings.update_one({"booking_id": booking_id}, {"$set": {"payment": pay}})
+    return {"refund": pay["refund"]}
 
 
 async def _apply_status(booking_id, new_status):

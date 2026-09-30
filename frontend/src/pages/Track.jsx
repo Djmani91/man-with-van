@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, Truck, Clock, CheckCircle2, Circle, MessageSquare, Lock, Star } from "lucide-react";
-import { api } from "@/lib/api";
+import { ArrowLeft, Phone, Truck, Clock, CheckCircle2, Circle, MessageSquare, Lock, Star, UserX, XCircle, Search } from "lucide-react";
+import { api, formatApiError } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { ChatModal } from "@/components/ChatModal";
+import { ReasonDialog } from "@/components/ReasonDialog";
 import { TrackingMap } from "@/components/TrackingMap";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 export default function Track() {
   const { id } = useParams();
@@ -15,6 +17,29 @@ export default function Track() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [chat, setChat] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const doCancel = async (reason) => {
+    setBusy(true);
+    try {
+      const { data: res } = await api.post(`/bookings/${id}/cancel`, { reason });
+      toast.success(res.refund_requested ? "Job cancelled — your refund has been requested." : "Job cancelled.");
+      setCancelOpen(false); await load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setBusy(false); }
+  };
+  const doChange = async (reason) => {
+    setBusy(true);
+    try {
+      const { data: res } = await api.post(`/bookings/${id}/change-driver`, { reason });
+      toast.success(res.message || "Finding you another driver.");
+      setChangeOpen(false); await load();
+      navigate("/jobs");
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setBusy(false); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -111,6 +136,31 @@ export default function Track() {
               </div>
             )}
 
+            {data.status === "assigned" && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-2" data-testid="track-manage">
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Manage job</h3>
+                <Button variant="outline" onClick={() => setChangeOpen(true)} className="w-full gap-2" data-testid="track-change-driver"><UserX className="h-4 w-4" /> Change driver</Button>
+                <Button variant="ghost" onClick={() => setCancelOpen(true)} className="w-full gap-2 text-red-600 hover:text-red-700 hover:bg-red-50" data-testid="track-cancel"><XCircle className="h-4 w-4" /> Cancel job</Button>
+                <p className="text-[11px] text-slate-400 text-center">Free cancellation &amp; refund any time before your move.</p>
+              </div>
+            )}
+
+            {data.status === "quoting" && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-2" data-testid="track-searching">
+                <div className="flex items-center gap-2 text-slate-700"><Search className="h-4 w-4 text-primary" /><p className="text-sm font-medium">We're finding you a driver</p></div>
+                <p className="text-xs text-slate-500">This isn't guaranteed and may take longer close to your move time. You can pick a driver yourself, or cancel for a refund.</p>
+                <Button onClick={() => navigate("/jobs")} className="w-full bg-primary hover:bg-[#4C1D95] gap-2" data-testid="track-choose-driver"><Search className="h-4 w-4" /> Choose a driver</Button>
+                <Button variant="ghost" onClick={() => setCancelOpen(true)} className="w-full gap-2 text-red-600 hover:text-red-700 hover:bg-red-50" data-testid="track-cancel"><XCircle className="h-4 w-4" /> Cancel &amp; request refund</Button>
+              </div>
+            )}
+
+            {data.status === "cancelled" && data.payment?.refund && (
+              <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5" data-testid="track-refund-status">
+                <p className="text-sm font-semibold text-amber-800">Refund {data.payment.refund.status === "refunded" ? "completed" : "requested"}</p>
+                <p className="text-xs text-amber-700 mt-1">£{(data.payment.refund.amount || 0).toFixed(2)} {data.payment.refund.status === "refunded" ? "has been refunded to your card." : "— our team will process this back to your card shortly."}</p>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Timeline</h3>
               <ol className="space-y-4" data-testid="track-timeline">
@@ -135,6 +185,16 @@ export default function Track() {
         </div>
       </div>
       {data.driver && <ChatModal bookingId={id} open={chat} onOpenChange={setChat} meRole="customer" />}
+      <ReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Cancel this job?"
+        description="Full refund any time before your move. Tell us why so we can improve."
+        confirmLabel="Cancel job & request refund" tone="danger" busy={busy}
+        reasons={["Driver is late", "Driver not responding", "My plans changed", "Found it cheaper elsewhere", "Other"]}
+        onConfirm={doCancel} />
+      <ReasonDialog open={changeOpen} onOpenChange={setChangeOpen} title="Change your driver?"
+        description="We'll find another driver at no extra cost. It's not guaranteed and may take longer close to your move time."
+        confirmLabel="Yes, find another driver" busy={busy}
+        reasons={["Driver not responding", "Driver is late", "Driver asked to cancel", "Not comfortable with driver", "Other"]}
+        onConfirm={doChange} />
       <BottomNav />
     </div>
   );

@@ -176,9 +176,21 @@ const Stat = ({ icon: Icon, label, value, accent }) => (
 
 function AdminJobModal({ booking: b, onClose }) {
   const [messages, setMessages] = useState(null);
+  const [refund, setRefund] = useState((b.payment || {}).refund || null);
+  const [refunding, setRefunding] = useState(false);
   useEffect(() => {
     api.get(`/bookings/${b.booking_id}/messages`).then(({ data }) => setMessages(data)).catch(() => setMessages([]));
   }, [b.booking_id]);
+
+  const markRefunded = async () => {
+    setRefunding(true);
+    try {
+      const { data } = await api.post(`/admin/bookings/${b.booking_id}/refund`);
+      setRefund(data.refund);
+      toast.success("Marked as refunded. Remember to process it in your Square dashboard.");
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setRefunding(false); }
+  };
 
   const mid = b.pickup_coords && b.dropoff_coords
     ? { lat: (b.pickup_coords.lat + b.dropoff_coords.lat) / 2, lng: (b.pickup_coords.lng + b.dropoff_coords.lng) / 2 }
@@ -208,6 +220,20 @@ function AdminJobModal({ booking: b, onClose }) {
             <div><p className="text-xs uppercase tracking-wide text-slate-400">Price</p><p className="text-slate-800 font-semibold">{b.price ? `£${b.price.toFixed(2)}` : "—"}</p>{pay.status === "paid" && <p className="text-xs text-emerald-600">{pay.type === "deposit" ? "Deposit paid" : "Paid in full"}{pay.credit_applied ? ` · £${pay.credit_applied} credit` : ""}{b.promo_code ? ` · ${b.promo_code}` : ""}</p>}</div>
             <div><p className="text-xs uppercase tracking-wide text-slate-400">Extras</p><p className="text-xs text-slate-600">{[b.needs_helper && "Helper", b.heavy_items && "Heavy items", b.mode].filter(Boolean).join(" · ") || "—"}</p></div>
           </div>
+
+          {b.cancel_reason && <div className="text-sm rounded-lg bg-red-50 border border-red-100 p-3"><p className="text-xs uppercase tracking-wide text-red-400">Cancelled — reason</p><p className="text-red-700">{b.cancel_reason}</p></div>}
+
+          {refund && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between gap-3" data-testid="admin-refund-box">
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Refund {refund.status === "refunded" ? "completed" : "requested"} · £{(refund.amount || 0).toFixed(2)}</p>
+                <p className="text-xs text-amber-700">{refund.reason}</p>
+              </div>
+              {refund.status === "requested"
+                ? <Button size="sm" onClick={markRefunded} disabled={refunding} className="bg-emerald-600 hover:bg-emerald-700 shrink-0" data-testid="admin-mark-refunded">{refunding ? "…" : "Mark refunded"}</Button>
+                : <Badge className="bg-emerald-100 text-emerald-700 border-0">Refunded</Badge>}
+            </div>
+          )}
 
           {b.items && <div className="text-sm"><p className="text-xs uppercase tracking-wide text-slate-400">Items</p><p className="text-slate-700">{b.items}</p></div>}
           {b.notes && <div className="text-sm"><p className="text-xs uppercase tracking-wide text-slate-400">Notes</p><p className="text-slate-700">{b.notes}</p></div>}
