@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, MapPin, Star, MessageSquare, Truck, ShieldCheck, Zap, Gavel, Calendar, ArrowRight, PackageOpen, Loader2, Radio, AlertTriangle,
 } from "lucide-react";
@@ -32,6 +32,13 @@ export default function MyJobs() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [payFor, setPayFor] = useState(null); // { driverId, price }
   const [invoice, setInvoice] = useState(null);
+  const payRef = useRef(null);
+  const [payHighlight, setPayHighlight] = useState(false);
+  const promptPayment = () => {
+    payRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setPayHighlight(true);
+    setTimeout(() => setPayHighlight(false), 2200);
+  };
 
   const load = useCallback(async () => {
     const { data } = await api.get("/bookings");
@@ -147,7 +154,7 @@ export default function MyJobs() {
             </div>
 
             {/* Payment choice */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div ref={payRef} className={`bg-white rounded-2xl border-2 shadow-sm p-4 transition-all duration-300 ${payHighlight ? "border-primary ring-4 ring-violet-200 animate-pulse" : "border-slate-200"}`} data-testid="payment-choice">
               <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">How would you like to pay? <span className="text-[10px] font-bold uppercase tracking-wide text-primary">Required</span></p>
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <button onClick={() => setPayType("deposit")} data-testid="pay-deposit" className={`text-left p-3 rounded-xl border-2 transition-all ${payType === "deposit" ? "border-primary bg-violet-50" : "border-slate-200"}`}>
@@ -193,7 +200,7 @@ export default function MyJobs() {
                   </div>
                 )}
                 <OfferList offers={offers?.offers} loading={offers === null} note={`Drivers within ${offers?.radius_mi || 5} miles`}
-                  onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />
+                  onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} onNeedPayment={promptPayment} />
               </div>
             ) : (
               <div className="space-y-3">
@@ -203,7 +210,7 @@ export default function MyJobs() {
                 </div>
                 {bids.length === 0
                   ? <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400" data-testid="no-bids">Bids will appear here as drivers respond — this can take a little while.</div>
-                  : <OfferList offers={bids} onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} />}
+                  : <OfferList offers={bids} onAccept={accept} onChat={chatWithOffer} onProfile={setProfile} accepting={accepting} payType={payType} promoPct={promoPct} onNeedPayment={promptPayment} />}
               </div>
             )}
           </div>
@@ -264,7 +271,7 @@ export default function MyJobs() {
   );
 }
 
-function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepting, payType, promoPct = 0 }) {
+function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepting, payType, promoPct = 0, onNeedPayment }) {
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   if (!offers || offers.length === 0) return <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400" data-testid="no-offers">No drivers available right now. Try bidding to reach more drivers.</div>;
   return (
@@ -293,7 +300,7 @@ function OfferList({ offers, loading, note, onAccept, onChat, onProfile, accepti
           </div>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <Button variant="outline" onClick={() => onChat(o.driver_id)} className="gap-1.5" data-testid={`offer-msg-${o.driver_id}`}><MessageSquare className="h-4 w-4" /> Message</Button>
-            <Button onClick={() => onAccept(o.driver_id, o.price)} disabled={!payType || accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
+            <Button onClick={() => (payType ? onAccept(o.driver_id, o.price) : onNeedPayment?.())} disabled={accepting === o.driver_id} className="bg-primary hover:bg-[#4C1D95]" data-testid={`accept-${o.driver_id}`}>
               {accepting === o.driver_id ? "Processing…" : !payType ? "Choose payment first" : `Accept — £${((payType === "deposit" ? o.price * 0.15 : o.price) * (1 - promoPct)).toFixed(2)}`}
             </Button>
           </div>

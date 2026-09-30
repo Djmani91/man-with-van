@@ -159,3 +159,7 @@
 - Download PDF via jspdf + html2canvas (hex colors used to avoid html2canvas oklch issues). Added jspdf + html2canvas deps.
 - MyJobs: "Invoice" button on each booking whose payment.status is paid/office; opens the modal.
 - Verified iteration_23.json (frontend 100%): button gating, on-screen content, deposit balance note, and PDF download (INV-MWVE95427B8.pdf) all work, no html2canvas errors.
+
+## 2026-06 — "Choose payment first" scrolls to payment choice
+- MyJobs: the offer Accept button, when no payment type is selected, is now clickable and calls onNeedPayment() which smooth-scrolls up to the "How would you like to pay?" card and pulses/highlights it (ring) for ~2s. Once 15% deposit or Pay-in-full is chosen, the button becomes "Accept — £X" and charges. Payment card data-testid: payment-choice.
+- Frontend-only; compiles clean. Self-verified (deposit gating logic previously tested iter 18/23).
