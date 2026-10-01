@@ -1,20 +1,19 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Truck, LogOut, LayoutDashboard, User, Menu } from "lucide-react";
+import { Truck, LogOut, LayoutDashboard, User, Menu, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { SERVICE_NAV } from "@/data/servicePages";
 
 const LINKS = [
   { label: "Areas", href: "/man-and-van" },
-  { label: "Services", href: "/#services" },
-  { label: "How it works", href: "/#how" },
+  { label: "How it works", href: "/how-it-works" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Student Discount", href: "/student-discount" },
-  { label: "Reviews", href: "/#reviews" },
-  { label: "FAQ", href: "/#faq" },
+  { label: "FAQ", href: "/faq" },
 ];
 
 const initials = (name, email) =>
@@ -40,9 +39,26 @@ export const Navbar = () => {
         </Link>
 
         <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-600">
-          {LINKS.map((l) => (
-            <a key={l.label} href={l.href} className="hover:text-primary transition-colors" data-testid={`nav-${l.label.toLowerCase().replace(/\s/g, "-")}`}>{l.label}</a>
-          ))}
+          <a href="/man-and-van" className="hover:text-primary transition-colors" data-testid="nav-areas">Areas</a>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1 hover:text-primary transition-colors outline-none" data-testid="nav-services-menu">
+                Services <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+              <DropdownMenuItem onClick={() => navigate("/man-with-van-london")} data-testid="nav-service-london" className="font-medium">Man with van London</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {SERVICE_NAV.map((s) => (
+                <DropdownMenuItem key={s.slug} onClick={() => navigate(`/${s.slug}`)} data-testid={`nav-service-${s.slug}`}>{s.label}</DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <a href="/how-it-works" className="hover:text-primary transition-colors" data-testid="nav-how-it-works">How it works</a>
+          <a href="/#pricing" className="hover:text-primary transition-colors" data-testid="nav-pricing">Pricing</a>
+          <a href="/student-discount" className="hover:text-primary transition-colors" data-testid="nav-student-discount">Student Discount</a>
+          <a href="/faq" className="hover:text-primary transition-colors" data-testid="nav-faq">FAQ</a>
+          <a href="/contact" className="hover:text-primary transition-colors" data-testid="nav-contact">Contact</a>
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">

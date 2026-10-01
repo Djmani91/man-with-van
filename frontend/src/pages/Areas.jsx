@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AREAS } from "@/data/areas";
 
-const SITE = process.env.REACT_APP_BACKEND_URL || "";
+const SITE = process.env.REACT_APP_SITE_URL || process.env.REACT_APP_BACKEND_URL || "";
 
 const FAQS = [
   { q: "How much does a man and van cost in London?",

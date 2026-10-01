@@ -26,7 +26,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-from emails import send_booking_confirmation, send_status_update, send_driver_job_alert, send_driver_fixed_alert, send_driver_assigned
+from emails import send_booking_confirmation, send_status_update, send_driver_job_alert, send_driver_fixed_alert, send_driver_assigned, send_contact_enquiry
 import storage
 from square import Square
 from square.environment import SquareEnvironment
@@ -413,6 +413,13 @@ class LoginInput(BaseModel):
     password: str
 
 
+class ContactInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    phone: str = Field(default="", max_length=40)
+    message: str = Field(min_length=1, max_length=4000)
+
+
 class QuoteInput(BaseModel):
     pickup: str
     dropoff: str
@@ -655,6 +662,19 @@ async def validate_promo(code: str):
     if not promo:
         return {"valid": False}
     return {"valid": True, "code": code.strip().upper(), "discount_pct": promo["pct"], "label": promo["label"]}
+
+
+@api_router.post("/contact")
+async def contact_enquiry(data: ContactInput):
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"id": str(uuid.uuid4()), "name": data.name.strip(), "email": data.email,
+           "phone": data.phone.strip(), "message": data.message.strip(), "created_at": now, "handled": False}
+    await db.contact_messages.insert_one(doc)
+    try:
+        await send_contact_enquiry(os.environ["ADMIN_EMAIL"], doc)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Contact email failed: {e}")
+    return {"status": "received", "message": "Thanks — your enquiry has been sent. We'll reply by email soon."}
 
 
 @api_router.post("/quote")

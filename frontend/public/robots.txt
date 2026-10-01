@@ -9,4 +9,4 @@ Disallow: /track/
 Disallow: /admin
 Disallow: /driver
 
-Sitemap: https://move-tracker-dev.preview.emergentagent.com/sitemap.xml
+Sitemap: https://manwithvanapp.co.uk/sitemap.xml
