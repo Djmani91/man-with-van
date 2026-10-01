@@ -1,0 +1,29 @@
+{
+  "summary": "Verified instant-quote 30-minute confirm flow (backend POST /api/driver/jobs/{id}/confirm) and Driver Hub UI for Accepted-tab confirm prompt + fixed-price = driver earnings on Quotation detail/card. 3/3 pytest + 14/14 Playwright assertions pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_driver_confirm.py",
+    "/app/backend/tests/seed_iter25_confirm_ui.py",
+    "/app/test_reports/pytest/confirm.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py driver_confirm_job correctly guards: 403 when driver_id mismatch, 400 when accept_deadline < now (ISO string compare — works because deadlines are always UTC ISO with the same format), flips awaiting_driver_accept to False on success, and appends a 'Driver confirmed the job' timeline entry.",
+    "server.py sanitize_job computes customer_pays from my_bid/price/quote.total and your_earnings = cp * 0.85; broadcast after driver timeout keeps payment and sets fixed_price = original price (so your_earnings = 85% of what the customer actually paid). Correct.",
+    "DriverJobDetail.jsx: fixed-price branch headline shows 'You earn £{your_earnings}' (£68 for a £80 job); 'Customer pays' breakdown is gated on mode!=='quotation', so it does NOT appear on fixed-price quotation detail. Accept/Decline/Message buttons all render with the correct data-testids.",
+    "DriverDashboard.jsx: JobCard amount = fixed_price ? your_earnings : (my_bid ?? customer_pays ?? price) — card shows £68 for the £80 fixed job. Accepted tab correctly renders confirm-prompt-{id} + confirm-btn-{id} when awaiting_driver_accept, and swaps to the status dropdown after a successful POST /confirm.",
+    "Minor (not blocking): the confirm endpoint uses a string ISO lexicographic compare for accept_deadline. It works because deadlines are stored by _assign_and_pay in the same (datetime.now(timezone.utc)+30min).isoformat() format, but a datetime.fromisoformat() comparison would be safer against any legacy records that stored the deadline differently (e.g. with trailing 'Z' or local tz)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_driver_confirm.py (new)",
+    "/app/backend/tests/seed_iter25_confirm_ui.py (new)"
+  ],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (14/14 assertions)"},
+  "test_credentials": "Admin anisha91ahmed@gmail.com / MoveAdmin#2026. Test driver + customer created fresh per run by the seed script.",
+  "seed_data_creation": "backend/tests/seed_iter25_confirm_ui.py registers a new approved driver + customer, creates one fixed-price quoting booking (£80, mode=fixed, within 30 mi of SW1A 2DD), one assigned instant booking with awaiting_driver_accept=True + future accept_deadline, and one assigned instant booking with awaiting_driver_accept=False. Mongo seed is cleaned up after the UI run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To re-run backend: export MONGO_URL/DB_NAME/REACT_APP_BACKEND_URL then `python -m pytest backend/tests/test_driver_confirm.py -v -o addopts=\"\"`. To re-run UI: run seed_iter25_confirm_ui.py, read the JSON, then drive Playwright: dnav-quotation / dnav-accepted bottom-nav test-ids; confirm-prompt-{id} + confirm-btn-{id} on Accepted; fixed-price-badge, job-detail-accept/decline/message on the fixed-price detail. Note: card amount uses a PoundSterling SVG icon (lucide), so page.text_content() returns the digits only (e.g. '68'), not '£68' — assert on the number, not on the glyph.",
+  "rca of the issue": "N/A — no bugs found this iteration."
+}

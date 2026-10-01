@@ -35,7 +35,7 @@ export const Navbar = () => {
     <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-xl border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2 shrink-0" data-testid="nav-logo">
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center"><Truck className="h-5 w-5 text-white" /></div>
+          <img src="/logo.png" alt="Man With Van" className="h-9 w-9 rounded-lg object-cover shrink-0" />
           <span className="font-heading font-extrabold text-lg tracking-tight text-slate-900 leading-none">Man With<br className="hidden sm:block" /> Van</span>
         </Link>
 
