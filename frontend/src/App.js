@@ -19,6 +19,8 @@ import DriverDashboard from "@/pages/DriverDashboard";
 import Areas from "@/pages/Areas";
 import AreaLanding from "@/pages/AreaLanding";
 import StudentDiscountPage from "@/pages/StudentDiscountPage";
+import ServicePage from "@/pages/ServicePage";
+import { SERVICE_PAGES } from "@/data/servicePages";
 
 function Shell() {
   const location = useLocation();
@@ -29,6 +31,9 @@ function Shell() {
       <Route path="/man-and-van" element={<Areas />} />
       <Route path="/man-and-van/:slug" element={<AreaLanding />} />
       <Route path="/student-discount" element={<StudentDiscountPage />} />
+      {Object.keys(SERVICE_PAGES).map((slug) => (
+        <Route key={slug} path={`/${slug}`} element={<ServicePage />} />
+      ))}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/book" element={<Book />} />
