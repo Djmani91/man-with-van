@@ -19,8 +19,8 @@ exactly as-is, don't redesign it.
 
 2. CONNECT TO MY EXISTING BACKEND (do NOT build a new backend, do NOT touch
    MongoDB directly): Set API_BASE in src/config.js to my deployed backend URL:
-   https://move-tracker-dev.emergent.host  (or my custom domain
-   https://manwithvanapp.co.uk). All endpoints are prefixed with /api. Auth uses a
+   https://manwithvanapp.co.uk  (my custom domain; it serves the same backend).
+   All endpoints are prefixed with /api. Auth uses a
    Bearer token returned by /api/auth/login and /api/auth/register — store it and
    send Authorization: Bearer <token> on every request. The backend already
    supports this; no backend changes.
