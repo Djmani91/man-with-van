@@ -1,5 +1,10 @@
 # Paste this into your mobile-app-kit project
 
+IMPORTANT: This is a mobile APP, not a website. NO landing page, NO marketing/SEO
+pages (no Home, Areas, Services, Pricing, FAQ). The app opens on a Login screen.
+After login: customers see only the booking app (Book, My Jobs, Account); drivers
+see only the Driver Hub (Quotation, Accepted, Message, Settings).
+
 Build my "Man With Van" mobile app. I already have the complete React Native /
 Expo source code (in the /app/mobile_app folder of my website project) — use it
 exactly as-is, don't redesign it.
