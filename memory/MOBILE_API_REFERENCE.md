@@ -17,20 +17,14 @@ Hand this file to your mobile developer. It is the single source of truth for ho
 - Store the base URL once in app config (e.g. Expo `extra.API_BASE`) — never hardcode per screen.
 - All request/response bodies are JSON (except file upload = multipart).
 
-## 2. Authentication (READ CAREFULLY — mobile differs from web)
-- The **website** uses an httpOnly cookie (`session_token`). Mobile cannot rely on cookies.
-- The backend's `get_current_user` and `/api/files` **already accept a Bearer token**:
-  `Authorization: Bearer <session_token>`.
-- **One small backend change is needed for mobile:** the login / register / session
-  endpoints currently set the token as a cookie. Return that same token in the JSON body
-  too, so the app can save it in secure storage (Expo SecureStore / Keychant / Keystore)
-  and send `Authorization: Bearer <token>` on every request.
-  - Endpoints to add the token to the response body: `/api/auth/login`,
-    `/api/auth/register`, `/api/auth/driver-register`, `/api/auth/session`.
+## 2. Authentication (READ CAREFULLY — mobile uses Bearer tokens)
+- The **website** uses an httpOnly cookie (`session_token`). Mobile cannot rely on cookies, so it uses a **Bearer token** — and the backend already supports this fully (no backend change needed):
+  - `/api/auth/login`, `/api/auth/register`, `/api/auth/driver-register` and `/api/auth/session` all return the token in the JSON body as `token`.
+  - `get_current_user` and `/api/files` accept `Authorization: Bearer <token>`.
+- On login/register: save `token` in secure storage (Expo SecureStore / Keychain / Keystore) and send `Authorization: Bearer <token>` on **every** authenticated request.
 - **Google sign-in on mobile:** use Expo AuthSession with the Emergent OAuth flow, then
   `POST /api/auth/session` with header `X-Session-ID: <session_id>` to exchange it for the
-  session token.
-- Send `Authorization: Bearer <token>` on **every** authenticated request.
+  session token (also returned as `token`).
 
 ### Auth endpoints
 | Method | Path | Body | Purpose |

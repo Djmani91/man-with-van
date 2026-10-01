@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Man With Van",
+    "slug": "man-with-van",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "manwithvan",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#5B21B6"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.base6a789f0035d4228147cfc5c9.app"
+    },
+    "android": {
+      "package": "com.base6a789f0035d4228147cfc5c9.app"
+    },
+    "extra": {
+      "API_BASE": "https://move-tracker-dev.preview.emergentagent.com"
+    }
+  }
+}
